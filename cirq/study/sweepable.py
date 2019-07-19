@@ -14,14 +14,21 @@
 
 """Defines which types are Sweepable."""
 
-from typing import cast, Iterable, List, Union
+from typing import cast, Iterable, List, Union, Dict
 
 from cirq.study.resolver import ParamResolver
 from cirq.study.sweeps import Sweep
 
 
 Sweepable = Union[
-    ParamResolver, Iterable[ParamResolver], Sweep, Iterable[Sweep]]
+    None,
+    Dict[str, float],
+    Iterable[Dict[str, float]],
+    ParamResolver,
+    Iterable[ParamResolver],
+    Sweep,
+    Iterable[Sweep],
+]
 
 
 def to_resolvers(sweepable: Sweepable) -> List[ParamResolver]:

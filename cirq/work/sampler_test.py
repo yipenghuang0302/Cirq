@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for cirq.Sampler."""
+import sympy
 
 import cirq
+from cirq.work.sampler import _trial_results_to_dataframe
 
 
 def test_sampler_fail():
@@ -27,3 +29,23 @@ def test_sampler_fail():
         cirq.Circuit(), repetitions=1),
                                            ValueError,
                                            match='test')
+
+
+def test_frame_trial_results():
+    a = sympy.Symbol('a')
+    b = sympy.Symbol('b')
+    q = cirq.NamedQubit('q')
+    p = cirq.NamedQubit('p')
+    c = cirq.Circuit.from_ops(
+        cirq.X(q)**a,
+        cirq.CNOT(q, p),
+        cirq.X(p)**b,
+        cirq.measure(q, key='m'),
+        cirq.measure(p, key='m2'),
+    )
+
+    results = cirq.Simulator().run_sweep(c, repetitions=5, params=cirq.Linspace('a', 0, 3, 5) * cirq.Linspace('b', -1, +1, 5))
+    x = _trial_results_to_dataframe(results)
+    print(x)
+    print(x[x['a'] == 1])
+    assert False
