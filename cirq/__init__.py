@@ -246,6 +246,7 @@ from cirq.sim import (
     SimulatesSamples,
     SimulationTrialResult,
     Simulator,
+    KnowledgeCompilationSimulator,
     SparseSimulatorStep,
     StateVectorMixin,
     StepResult,

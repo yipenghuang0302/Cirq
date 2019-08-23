@@ -48,6 +48,10 @@ from cirq.sim.sparse_simulator import (
     SparseSimulatorStep,
 )
 
+from cirq.sim.kc_simulator import (
+    KnowledgeCompilationSimulator,
+)
+
 from cirq.sim.wave_function_simulator import (
     SimulatesIntermediateWaveFunction,
     WaveFunctionSimulatorState,
