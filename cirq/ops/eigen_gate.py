@@ -303,8 +303,8 @@ class EigenGate(raw_types.Gate):
         return not self._is_parameterized_()
 
     def _unitary_(self) -> Union[np.ndarray, NotImplementedType]:
-        if self._is_parameterized_():
-            return NotImplemented
+        # if self._is_parameterized_():
+        #     return NotImplemented
         e = cast(float, self._exponent)
         return np.sum([
             component * 1j**(
