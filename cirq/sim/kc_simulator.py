@@ -166,7 +166,7 @@ potential ( {target_posterior} | '''
         if complex_symbols==0:
             return '0'
         elif isinstance ( complex_symbols, numbers.Number ) :
-            return(f'{complex_symbols.real:f},{complex_symbols.imag:f}')
+            return(f'{complex_symbols.real:.8f},{complex_symbols.imag:.8f}')
         else:
             self._hash_to_symbols[hash(complex_symbols)%(1<<28)] = complex_symbols
             return(hash(complex_symbols)%(1<<28))
@@ -240,8 +240,7 @@ potential ( {target_posterior} | '''
 
             qubit_to_last_gate_index[target_qubit] = 0
 
-            # TODO: pad the qubit number so sorted order looks nicer
-            target_posterior = 'q' + str(target_qubit) + 'n' + str(qubit_to_last_gate_index[target_qubit]).zfill(4)
+            target_posterior = 'q' + str(target_qubit).zfill(4) + 'n' + str(qubit_to_last_gate_index[target_qubit]).zfill(4)
             node_string = self.net_prelude
             node_string += self.net_interlude
 
@@ -251,8 +250,8 @@ potential ( {target_posterior} | '''
                     '1' if initial_value else '0'
                     )
             else:
-                qi0_sym = 'q'+str(target_qubit)+'i0'
-                qi1_sym = 'q'+str(target_qubit)+'i1'
+                qi0_sym = 'q'+str(target_qubit).zfill(4)+'i0'
+                qi1_sym = 'q'+str(target_qubit).zfill(4)+'i1'
                 node_string += '({} {})'.format ( hash(qi0_sym)%(1<<28), hash(qi1_sym)%(1<<28) )
 
             node_string += self.net_postlude
@@ -264,7 +263,6 @@ potential ( {target_posterior} | '''
 
             transposed_cpts = self._unitary_to_transposed_cpt( posterior_node.val.gate, protocols.unitary(posterior_node.val) )
 
-            # to adhere to Cirq's endian convention:
             for target_qubit, transposed_cpt in zip(reversed(posterior_node.val.qubits), reversed(transposed_cpts)):
 
                 node_string = self.net_prelude
@@ -272,14 +270,14 @@ potential ( {target_posterior} | '''
                 parents=[]
                 for control_qubit in posterior_node.val.qubits:
                     depth = str(qubit_to_last_gate_index[control_qubit]).zfill(4)
-                    parent = 'q' + str(control_qubit) + 'n' + depth
+                    parent = 'q' + str(control_qubit).zfill(4) + 'n' + depth
                     node_string += parent + ' '
                     parents.append(parent)
                 node_string += self.net_interlude
                 node_string += self._net_data_format ( parents, 0 )
                 node_string += self.net_postlude
 
-                target_posterior = 'q' + str(target_qubit) + 'n' + str(qubit_to_last_gate_index[target_qubit]+1).zfill(4)
+                target_posterior = 'q' + str(target_qubit).zfill(4) + 'n' + str(qubit_to_last_gate_index[target_qubit]+1).zfill(4)
                 net_file.write(node_string.format(
                     target_posterior=target_posterior,
                     data=self._cpt_to_cpp_complex_hash(transposed_cpt.transpose())
@@ -318,11 +316,11 @@ potential ( {target_posterior} | '''
 
         # Build the evaluator for the arithmetic circuit
         stdout = os.system('mkdir evaluator')
-        stdout = os.system('javac -d evaluator -cp /n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar -Xlint:unchecked /n/fs/qdb/Cirq/cirq/sim/Test.java /n/fs/qdb/qACE/org/apache/commons/math3/complex/ComplexFormat.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngine.java /n/fs/qdb/qACE/aceEvalComplexSrc/Calculator.java /n/fs/qdb/qACE/aceEvalComplexSrc/Evidence.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngineSop.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorNormal.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorLogE.java /n/fs/qdb/qACE/aceEvalComplexSrc/UnderflowException.java')
+        stdout = os.system('javac -d evaluator -cp /n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar -Xlint:unchecked /n/fs/qdb/Cirq/cirq/sim/Evaluator.java /n/fs/qdb/qACE/org/apache/commons/math3/complex/ComplexFormat.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngine.java /n/fs/qdb/qACE/aceEvalComplexSrc/Calculator.java /n/fs/qdb/qACE/aceEvalComplexSrc/Evidence.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngineSop.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorNormal.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorLogE.java /n/fs/qdb/qACE/aceEvalComplexSrc/UnderflowException.java')
         print (stdout)
 
         # Launch the evaluator in a subprocess
-        self._subprocess = subprocess.Popen(["java", "-cp", "evaluator:/n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar", "edu.ucla.belief.ace.Test", "circuit.lmap", "circuit.cnf.nnf", str(self._num_qubits)], stdin=subprocess.PIPE)
+        self._subprocess = subprocess.Popen(["java", "-cp", "evaluator:/n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar", "edu.ucla.belief.ace.Evaluator", "circuit.lmap", "circuit.cnf.nnf", str(self._num_qubits)], stdin=subprocess.PIPE)
 
     def __del__(self):
         self._subprocess.kill()
@@ -364,11 +362,12 @@ potential ( {target_posterior} | '''
         actual_initial_state = 0 if initial_state is None else initial_state
         for target_qubit, initial_value in zip (
             self._qubits,
+            # to adhere to Cirq's endian convention:
             [bool(actual_initial_state & (1<<n)) for n in reversed(range(self._num_qubits))]
             ):
-            qi0_sym = 'q'+str(target_qubit)+'i0'
+            qi0_sym = 'q'+str(target_qubit).zfill(4)+'i0'
             param_dict[ hash(qi0_sym)%(1<<28) ] = '0' if initial_value else '1'
-            qi1_sym = 'q'+str(target_qubit)+'i1'
+            qi1_sym = 'q'+str(target_qubit).zfill(4)+'i1'
             param_dict[ hash(qi1_sym)%(1<<28) ] = '1' if initial_value else '0'
 
         param_resolvers = study.to_resolvers(params)
@@ -410,15 +409,15 @@ potential ( {target_posterior} | '''
                     line = csv_file.readline()
                     row = line.split(',')
                     assert int(row[0]) == outputQubitString
-                    measurements[row[0]] = np.array(row[1], dtype=bool)
+                    # measurements[row[0]] = np.array(row[1], dtype=bool)
                     state_vector.append(complex(row[1]))
-            # TODO: assert total probability is close to 1
+            assert float(row[2])-1.0 < 1.0/256.0
             os.remove(f'{hash_csv}.csv')
 
             final_simulator_state = wave_function_simulator.WaveFunctionSimulatorState(qubit_map=self._qubit_map,state_vector=state_vector)
             trial_results.append(
                 wave_function_simulator.WaveFunctionTrialResult(
-                    params=params,
+                    params=param_resolver,
                     measurements=measurements,
                     final_simulator_state=final_simulator_state))
 

@@ -8,13 +8,13 @@ import org.apache.commons.math3.complex.*;
  * simple.net.ac must have been compiled using the SOP kind and must be in the
  * directory from which this program is executed.
  * <code>
- * Usage java edu.ucla.belief.Test
+ * Usage java edu.ucla.belief.Evaluator
  * </code>
  *
  * @author Mark Chavira
  */
 
-public class Test {
+public class Evaluator {
 
   /**
    * The main program.
@@ -36,18 +36,16 @@ public class Test {
         args[1],
         false);
     qubitCount = Integer.parseInt(args[2]);
-    // System.out.print("qubitCount = ");
-    // System.out.println(qubitCount);
 
     // Obtain some objects representing variables in the network.  We are not
     // creating network variables here, just retrieving them by name from the
     // OnlineEngine.
-    for (int qubit=0; qubit<qubitCount; qubit++) {
-      String qubitName = String.format("q%01dn0000", qubit);
-      int varForQubit = g.varForName(qubitName);
-      // System.out.print(qubitName);
-      // System.out.println(varForQubit);
-    }
+    // for (int qubit=0; qubit<qubitCount; qubit++) {
+    //   String qubitName = String.format("q%04dn0000", qubit);
+    //   int varForQubit = g.varForName(qubitName);
+    //   System.out.print(qubitName);
+    //   System.out.println(varForQubit);
+    // }
 
     int[] qubitFinalToVar = new int[qubitCount];
     for (int qubit=0; qubit<qubitCount; qubit++) {
@@ -61,11 +59,9 @@ public class Test {
         String qubitName = g.nameForVar(varForQubit);
         // System.out.print("qubitName=");
         // System.out.println(qubitName);
-        if (qubitName.startsWith(String.format("q%01d", qubit))) {
-        // if (qubitName.endsWith(String.format("qubit%04d", qubit))) {
+        if (qubitName.startsWith(String.format("q%04d", qubit))) {
           qubitFinalToVar[qubit] = varForQubit;
           found = true;
-          // System.out.println("found = true;");
         }
       }
     }
@@ -96,8 +92,8 @@ public class Test {
           for (int qubit=0; qubit<qubitCount; qubit++) {
             int varForQubit = qubitFinalToVar[qubit];
             // String qubitName = g.nameForVar(varForQubit);
+            // to adhere to Cirq's endian convention:
             evidence.varCommit(varForQubit, ((int)(outputQubitString>>(qubitCount-qubit-1)))&1);
-
             // System.out.println(qubitName);
             // System.out.println(varForQubit);
           }
@@ -142,21 +138,10 @@ public class Test {
           //   varPosteriors[v] = g.varPosteriors(v);
           // }
 
-          // Complex[][] potPartials = new Complex[g.numPotentials()][];
-          // Complex[][] potMarginals = new Complex[g.numPotentials()][];
-          // Complex[][] potPosteriors = new Complex[g.numPotentials()][];
-          // for (int pot = 0; pot < g.numPotentials(); ++pot) {
-          //   potPartials[pot] = g.potPartials(pot);
-          //   potMarginals[pot] = g.potMarginals(pot);
-          //   potPosteriors[pot] = g.potPosteriors(pot);
-          // }
-
           // Finally, write the results to out file.
           if (amplitude.getImaginary()<0) {
-            // System.out.println(outputQubitString+","+amplitude.getReal()+""+amplitude.getImaginary()+"j"+","+probabilitySum+","+evidenceDuration+","+evaluationDuration);
             csv.write(outputQubitString+","+amplitude.getReal()+""+amplitude.getImaginary()+"j"+","+probabilitySum+","+evidenceDuration+","+evaluationDuration);
           } else {
-            // System.out.println(outputQubitString+","+amplitude.getReal()+"+"+amplitude.getImaginary()+"j"+","+probabilitySum+","+evidenceDuration+","+evaluationDuration);
             csv.write(outputQubitString+","+amplitude.getReal()+"+"+amplitude.getImaginary()+"j"+","+probabilitySum+","+evidenceDuration+","+evaluationDuration);
           }
           csv.newLine();
@@ -175,22 +160,6 @@ public class Test {
           //   System.out.println(
           //       "Pr(" + g.nameForVar(v) + " | evidence) = " +
           //       Arrays.toString(varPosteriors[v]));
-          // }
-
-          // for (int p = 0; p < g.numPotentials(); ++p) {
-          //   System.out.println(
-          //       "(PD wrt " + g.nameForPot(p) + ")(evidence) = " +
-          //       Arrays.toString(potPartials[p]));
-          // }
-          // for (int p = 0; p < g.numPotentials(); ++p) {
-          //   System.out.println(
-          //       "Pr(" + g.nameForPot(p) + ", evidence) = " +
-          //       Arrays.toString(potMarginals[p]));
-          // }
-          // for (int p = 0; p < g.numPotentials(); ++p) {
-          //   System.out.println(
-          //       "Pr(" + g.nameForPot(p) + " | evidence) = " +
-          //       Arrays.toString(potPosteriors[p]));
           // }
 
         }
