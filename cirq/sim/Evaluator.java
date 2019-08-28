@@ -47,29 +47,23 @@ public class Evaluator {
     //   System.out.println(varForQubit);
     // }
 
-    int[] qubitFinalToVar = new int[qubitCount];
-    for (int qubit=0; qubit<qubitCount; qubit++) {
-      // System.out.print("Finding final node for qubit ");
-      // System.out.println(qubit);
-
-      boolean found = false;
-      for (int varForQubit=g.numVariables()-1; !found; varForQubit--) {
-        // System.out.print("varForQubit=");
-        // System.out.println(varForQubit);
-        String qubitName = g.nameForVar(varForQubit);
-        // System.out.print("qubitName=");
-        // System.out.println(qubitName);
-        if (qubitName.startsWith(String.format("q%04d", qubit))) {
-          qubitFinalToVar[qubit] = varForQubit;
-          found = true;
-        }
-      }
-    }
-
     try {
       while( g.readLiteralMap(lmReader, OnlineEngine.CompileKind.ALWAYS_SUM) != null ){
 
-        BufferedWriter csv = new BufferedWriter(new FileWriter(g.hash_csv+".buf"));
+        int[] qubitFinalToVar = new int[qubitCount];
+        for (int qubit=0; qubit<qubitCount; qubit++) {
+          for (int trial=g.moment; ; trial--) {
+            String qubitName = String.format("n%04dq%04d", trial, qubit);
+            try {
+              int varForQubit = g.varForName(qubitName);
+              qubitFinalToVar[qubit] = varForQubit;
+              break;
+            } catch (Exception e) {
+            }
+          }
+        }
+
+        BufferedWriter csv = new BufferedWriter(new FileWriter(g.basename+".buf"));
 
         // Construct evidence.
         Evidence evidence = new Evidence(g);
@@ -165,9 +159,9 @@ public class Evaluator {
         }
 
         csv.close();
-        File oldfile = new File (g.hash_csv+".buf");
-    		File newfile = new File (g.hash_csv+".csv");
-    		oldfile.renameTo(newfile);
+        File oldfile = new File (g.basename+".buf");
+        File newfile = new File (g.basename+".csv");
+        oldfile.renameTo(newfile);
       }
     } catch(IOException e) {
         e.printStackTrace();

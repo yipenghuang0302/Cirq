@@ -14,17 +14,20 @@
 
 """A simulator that uses Bayesian network knowledge compilation."""
 
-from typing import Any, List, Union
+import collections
+
+from typing import Any, Dict, Iterator, List, Union
 
 import numbers, cmath, sympy
 import numpy as np
 
 from cirq import circuits, ops, protocols, schedules, study, optimizers
-from cirq.sim import simulator, wave_function_simulator
+from cirq.sim import simulator, wave_function, wave_function_simulator, sparse_simulator
 
 import os, subprocess, re, csv, sys, time
 
-class KnowledgeCompilationSimulator(simulator.SimulatesFinalState):
+class KnowledgeCompilationSimulator(simulator.SimulatesSamples,
+                                    wave_function_simulator.SimulatesIntermediateWaveFunction):
     """A wave function simulator based on Bayesian network knowledge compilation.
 
     This simulator can be applied on circuits that are made up of operations
@@ -161,7 +164,6 @@ potential ( {target_posterior} | '''
 
     # If CPT element is complex number, writes CPP style complex value for bayes-to-cnf
     # If CPT element is a sympy object, writes a 28-bit integer hash so we can find it again at inference time
-    _hash_to_symbols = {}
     def _to_cpp_complex_hash ( self, complex_symbols ):
         if complex_symbols==0:
             return '0'
@@ -186,10 +188,7 @@ potential ( {target_posterior} | '''
     def _to_java_complex ( self, complex_symbols ):
         if complex_symbols==0:
             return '0'
-        elif isinstance ( complex_symbols, numbers.Number ) :
-            return(f'{complex_symbols.real:f}+{complex_symbols.imag:f}i')
-        else:
-            raise Exception(f'Not a number: {complex_symbols}.')
+        return(f'{complex_symbols.real:f}+{complex_symbols.imag:f}i')
 
     def __init__(
         self,
@@ -210,15 +209,16 @@ potential ( {target_posterior} | '''
 
         circuit = (program if isinstance(program, circuits.Circuit) else program.to_circuit())
 
-        optimizers.ExpandComposite().optimize_circuit(circuit)
+        # optimizers.ExpandComposite().optimize_circuit(circuit)
         # optimizers.ConvertToCzAndSingleGates().optimize_circuit(circuit) # cannot work with params
         # optimizers.EjectPhasedPaulis().optimize_circuit(circuit)
         optimizers.EjectZ().optimize_circuit(circuit)
         # optimizers.MergeInteractions().optimize_circuit(circuit)
-        optimizers.MergeSingleQubitGates().optimize_circuit(circuit)
+        # optimizers.MergeSingleQubitGates().optimize_circuit(circuit)
         optimizers.DropEmptyMoments().optimize_circuit(circuit)
         # optimizers.DropNegligible().optimize_circuit(circuit)
 
+        self._circuit = circuit
         self._qubits = ops.QubitOrder.as_qubit_order(qubit_order).order_for(circuit.all_qubits())
         self._num_qubits = len(self._qubits)
         self._qubit_map = {q: i for i, q in enumerate(self._qubits)}
@@ -229,7 +229,6 @@ potential ( {target_posterior} | '''
         # initial_state: Union[int, np.ndarray],
         self._initial_state_lockout = False if initial_state is None else True
         # generate Bayesian network nodes with no priors for qubit initialization
-        # TODO: this might need to be indexed by moments
         qubit_to_last_gate_index = {}
         actual_initial_state = 0 if initial_state is None else initial_state
         for target_qubit, initial_value in zip (
@@ -240,7 +239,7 @@ potential ( {target_posterior} | '''
 
             qubit_to_last_gate_index[target_qubit] = 0
 
-            target_posterior = 'q' + str(target_qubit).zfill(4) + 'n' + str(qubit_to_last_gate_index[target_qubit]).zfill(4)
+            target_posterior =  'n' + str(qubit_to_last_gate_index[target_qubit]).zfill(4) + 'q' + str(target_qubit).zfill(4)
             node_string = self.net_prelude
             node_string += self.net_interlude
 
@@ -250,48 +249,48 @@ potential ( {target_posterior} | '''
                     '1' if initial_value else '0'
                     )
             else:
-                qi0_sym = 'q'+str(target_qubit).zfill(4)+'i0'
-                qi1_sym = 'q'+str(target_qubit).zfill(4)+'i1'
+                qi0_sym = 'i0' + 'q'+str(target_qubit).zfill(4)
+                qi1_sym = 'i1' + 'q'+str(target_qubit).zfill(4)
                 node_string += '({} {})'.format ( hash(qi0_sym)%(1<<28), hash(qi1_sym)%(1<<28) )
 
             node_string += self.net_postlude
 
             net_file.write(node_string.format(target_posterior=target_posterior))
 
-        dag = circuits.CircuitDag.from_circuit(circuit)
-        for posterior_node in dag.ordered_nodes():
+        self._hash_to_symbols = {}
+        for moment_index, moment in enumerate(circuit, start=1):
+            for op in moment:
+                transposed_cpts = self._unitary_to_transposed_cpt( op.gate, protocols.unitary(op) )
 
-            transposed_cpts = self._unitary_to_transposed_cpt( posterior_node.val.gate, protocols.unitary(posterior_node.val) )
+                for target_qubit, transposed_cpt in zip(reversed(op.qubits), reversed(transposed_cpts)):
 
-            for target_qubit, transposed_cpt in zip(reversed(posterior_node.val.qubits), reversed(transposed_cpts)):
+                    node_string = self.net_prelude
 
-                node_string = self.net_prelude
+                    parents=[]
+                    for control_qubit in op.qubits:
+                        depth = str(qubit_to_last_gate_index[control_qubit]).zfill(4)
+                        parent = 'n' + depth + 'q' + str(control_qubit).zfill(4)
+                        node_string += parent + ' '
+                        parents.append(parent)
+                    node_string += self.net_interlude
+                    node_string += self._net_data_format ( parents, 0 )
+                    node_string += self.net_postlude
 
-                parents=[]
-                for control_qubit in posterior_node.val.qubits:
-                    depth = str(qubit_to_last_gate_index[control_qubit]).zfill(4)
-                    parent = 'q' + str(control_qubit).zfill(4) + 'n' + depth
-                    node_string += parent + ' '
-                    parents.append(parent)
-                node_string += self.net_interlude
-                node_string += self._net_data_format ( parents, 0 )
-                node_string += self.net_postlude
+                    target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(target_qubit).zfill(4)
+                    net_file.write(node_string.format(
+                        target_posterior=target_posterior,
+                        data=self._cpt_to_cpp_complex_hash(transposed_cpt.transpose())
+                        ))
 
-                target_posterior = 'q' + str(target_qubit).zfill(4) + 'n' + str(qubit_to_last_gate_index[target_qubit]+1).zfill(4)
-                net_file.write(node_string.format(
-                    target_posterior=target_posterior,
-                    data=self._cpt_to_cpp_complex_hash(transposed_cpt.transpose())
-                    ))
-
-            # update depth
-            for target_qubit, transposed_cpt in zip(reversed(posterior_node.val.qubits), reversed(transposed_cpts)):
-                qubit_to_last_gate_index[target_qubit] += 1
+                # update depth
+                for target_qubit, transposed_cpt in zip(reversed(op.qubits), reversed(transposed_cpts)):
+                    qubit_to_last_gate_index[target_qubit] = moment_index
 
         net_file.close()
 
         # Bayesian network to conjunctive normal form
         # TODO: autoinstall this
-        stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -e -d -a -i circuit.net -w -s')
+        stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -b -i circuit.net -w -s')
         print (stdout)
 
         with open('circuit.cnf', 'r') as cnf_file:
@@ -299,129 +298,143 @@ potential ( {target_posterior} | '''
                 for line in cnf_file:
                     if line.startswith('cc'):
                         lmap_file.write(line)
-        self._re_compile = re.compile(r'[-+]?\d+')
+        self._int_re_compile = re.compile(r'[-+]?\d+')
+        self._node_re_compile = re.compile(r'n(\d+)')
 
-        # Conjunctive normal form to arithmetic circuit
-        bestFileSize = sys.maxsize
-        for _ in range(4):
-            stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -reduce -in circuit.cnf')
-            # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -reduce -minimize -smooth_all -keep_trivial_cls -in circuit.cnf')
-            # stdout = os.system('/n/fs/qdb/qACE/miniC2D-1.0.0/bin/linux/miniC2D -c circuit.cnf')
+        try:
+            # Conjunctive normal form to arithmetic circuit
+            bestFileSize = sys.maxsize
+            for _ in range(4):
+                stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -simplify_s -in circuit.cnf')
+                stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -reduce -dt_method 3 -in circuit.cnf_simplified')
+                # -keep_trivial_cls
+                # stdout = os.system('/n/fs/qdb/qACE/miniC2D-1.0.0/bin/linux/miniC2D -c circuit.cnf_simplified')
+                print (stdout)
+                currFileSize = os.path.getsize('circuit.cnf_simplified.nnf')
+                if currFileSize<bestFileSize:
+                    bestFileSize = currFileSize
+                    os.rename('circuit.cnf_simplified.nnf','best.cnf_simplified.nnf')
+            os.rename('best.cnf_simplified.nnf','circuit.cnf_simplified.nnf')
+
+            # Build the evaluator for the arithmetic circuit
+            stdout = os.system('mkdir evaluator')
+            stdout = os.system('javac -d evaluator -cp /n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar -Xlint:unchecked /n/fs/qdb/Cirq/cirq/sim/Evaluator.java /n/fs/qdb/qACE/org/apache/commons/math3/complex/ComplexFormat.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngine.java /n/fs/qdb/qACE/aceEvalComplexSrc/Calculator.java /n/fs/qdb/qACE/aceEvalComplexSrc/Evidence.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngineSop.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorNormal.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorLogE.java /n/fs/qdb/qACE/aceEvalComplexSrc/UnderflowException.java')
             print (stdout)
-            currFileSize = os.path.getsize('circuit.cnf.nnf')
-            if currFileSize<bestFileSize:
-                bestFileSize = currFileSize
-                os.rename('circuit.cnf.nnf','best.cnf.nnf')
-        os.rename('best.cnf.nnf','circuit.cnf.nnf')
 
-        # Build the evaluator for the arithmetic circuit
-        stdout = os.system('mkdir evaluator')
-        stdout = os.system('javac -d evaluator -cp /n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar -Xlint:unchecked /n/fs/qdb/Cirq/cirq/sim/Evaluator.java /n/fs/qdb/qACE/org/apache/commons/math3/complex/ComplexFormat.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngine.java /n/fs/qdb/qACE/aceEvalComplexSrc/Calculator.java /n/fs/qdb/qACE/aceEvalComplexSrc/Evidence.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngineSop.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorNormal.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorLogE.java /n/fs/qdb/qACE/aceEvalComplexSrc/UnderflowException.java')
-        print (stdout)
+            # Launch the evaluator in a subprocess
+            self._subprocess = subprocess.Popen(["java", "-cp", "evaluator:/n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar", "edu.ucla.belief.ace.Evaluator", "circuit.lmap", "circuit.cnf_simplified.nnf", str(self._num_qubits)], stdin=subprocess.PIPE)
 
-        # Launch the evaluator in a subprocess
-        self._subprocess = subprocess.Popen(["java", "-cp", "evaluator:/n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar", "edu.ucla.belief.ace.Evaluator", "circuit.lmap", "circuit.cnf.nnf", str(self._num_qubits)], stdin=subprocess.PIPE)
+        except:
+            pass
 
     def __del__(self):
         self._subprocess.kill()
 
-    def simulate_sweep(
+    def _run(
         self,
-        program: Union[circuits.Circuit, schedules.Schedule], # unused
-        params: study.Sweepable,
-        qubit_order: ops.QubitOrderOrList = ops.QubitOrder.DEFAULT, # unused
-        initial_state: Any = None,
-    ) -> List['SimulationTrialResult']:
-        """Simulates the supplied Circuit or Schedule.
+        circuit: circuits.Circuit,
+        param_resolver: study.ParamResolver,
+        repetitions: int) -> Dict[str, List[np.ndarray]]:
+        pass
 
-        This method returns a result which allows access to the entire
-        wave function. In contrast to simulate, this allows for sweeping
-        over different parameter values.
+    def _simulator_iterator(
+            self,
+            circuit: circuits.Circuit, # unused
+            param_resolver: study.ParamResolver,
+            qubit_order: ops.QubitOrderOrList, # unused
+            initial_state: Union[int, np.ndarray],
+    ) -> Iterator:
+        """See definition in `cirq.SimulatesIntermediateState`.
 
-        Args:
-            program: The circuit or schedule to simulate.
-            params: Parameters to run with the program.
-            qubit_order: Determines the canonical ordering of the qubits. This
-                is often used in specifying the initial state, i.e. the
-                ordering of the computational basis states.
-            initial_state: The initial state for the simulation. The form of
-                this state depends on the simulation implementation. See
-                documentation of the implementing class for details.
-
-        Returns:
-            List of SimulationTrialResults for this run, one for each
-            possible parameter resolver.
+        If the initial state is an int, the state is set to the computational
+        basis state corresponding to this state. Otherwise  if the initial
+        state is a np.ndarray it is the full initial state. In this case it
+        must be the correct size, be normalized (an L2 norm of 1), and
+        be safely castable to an appropriate dtype for the simulator.
         """
+        prep_start = time.time()
 
-        param_dict = {}
-
-        # initial_state: Union[int, np.ndarray],
         if self._initial_state_lockout and initial_state is not None:
             raise Exception(f'Do not supply initial_state in both initialization and simulation.')
-
         actual_initial_state = 0 if initial_state is None else initial_state
+        if len(self._circuit) == 0:
+            return sparse_simulator.SparseSimulatorStep(
+                wave_function.to_valid_state_vector(actual_initial_state,self._num_qubits,self._dtype),
+                {},
+                self._qubit_map,
+                self._dtype)
+
+        self._param_dict = {}
         for target_qubit, initial_value in zip (
             self._qubits,
             # to adhere to Cirq's endian convention:
             [bool(actual_initial_state & (1<<n)) for n in reversed(range(self._num_qubits))]
             ):
-            qi0_sym = 'q'+str(target_qubit).zfill(4)+'i0'
-            param_dict[ hash(qi0_sym)%(1<<28) ] = '0' if initial_value else '1'
-            qi1_sym = 'q'+str(target_qubit).zfill(4)+'i1'
-            param_dict[ hash(qi1_sym)%(1<<28) ] = '1' if initial_value else '0'
+            qi0_sym = 'i0'+'q'+str(target_qubit).zfill(4)
+            self._param_dict[ hash(qi0_sym)%(1<<28) ] = '0' if initial_value else '1'
+            qi1_sym = 'i1'+'q'+str(target_qubit).zfill(4)
+            self._param_dict[ hash(qi1_sym)%(1<<28) ] = '1' if initial_value else '0'
 
-        param_resolvers = study.to_resolvers(params)
-        trial_results = []
-        for param_resolver in param_resolvers:
+        param_resolver = param_resolver or study.ParamResolver({})
+        self._hash_csv = int(hash((self._subprocess, param_resolver)))
+        for hash_key, symbols in self._hash_to_symbols.items():
+            self._param_dict[hash_key] = self._to_java_complex(protocols.resolve_parameters(symbols, param_resolver))
 
-            prep_start = time.time()
+        print("prep time = ")
+        print(time.time() - prep_start)
 
-            hash_csv = int(hash((self._subprocess, param_resolver, actual_initial_state)))
-            self._subprocess.stdin.write(f'cc$H${hash_csv}\n'.encode())
+        return self._base_iterator( actual_initial_state )
 
-            for hash_key, symbols in self._hash_to_symbols.items():
-                param_dict[hash_key] = self._to_java_complex(protocols.resolve_parameters(symbols, param_resolver))
+    def _base_iterator( self, initial_state: Union[int, np.ndarray] ) -> Iterator:
+
+        java_start = time.time()
+
+        for moment_index, moment in enumerate(self._circuit, start=1):
+
+            csv_basename = f'{self._hash_csv}_{initial_state:04d}_{moment_index:04d}'
+            self._subprocess.stdin.write(f'cc$B${csv_basename}\n'.encode())
+            self._subprocess.stdin.write(f'cc$M${moment_index}\n'.encode())
 
             with open('circuit.lmap', 'r') as lmap_file:
                 for line in lmap_file:
-                    int_strings = self._re_compile.findall(line)
+                    int_strings = self._int_re_compile.findall(line)
                     for int_string in int_strings:
-                        if int(int_string) in param_dict:
-                            line = re.sub(int_string, param_dict[int(int_string)], line)
+                        if int(int_string) in self._param_dict:
+                            line = re.sub(int_string, self._param_dict[int(int_string)], line)
+                    node_string = self._node_re_compile.findall(line)
+                    if node_string and int(node_string[0])>moment_index:
+                        line = re.sub(r'\+', 'I', line)
                     self._subprocess.stdin.write(line.encode())
 
-            print("prep time = ")
-            print(time.time() - prep_start)
-            java_start = time.time()
+            measurements = collections.defaultdict(
+                    list)  # type: Dict[str, List[bool]]
 
-            while not os.path.exists(f'{hash_csv}.csv'):
+            csv_name = f'{csv_basename}.csv'
+            while not os.path.exists(csv_name):
                 self._subprocess.stdin.write(b'\n') # keep pushing the BufferedReader
 
             print("java time = ")
             print(time.time() - java_start)
             post_start = time.time()
 
-            measurements = {}  # type: Dict[str, np.ndarray]
             state_vector = []
             outputQubitString = 0
-            with open(f'{hash_csv}.csv', 'r') as csv_file:
+            with open(csv_name, 'r') as csv_file:
                 for outputQubitString in range(1<<self._num_qubits):
                     line = csv_file.readline()
                     row = line.split(',')
                     assert int(row[0]) == outputQubitString
-                    # measurements[row[0]] = np.array(row[1], dtype=bool)
+                    # print (row)
+                    # print (row[1])
                     state_vector.append(complex(row[1]))
             assert float(row[2])-1.0 < 1.0/256.0
-            os.remove(f'{hash_csv}.csv')
-
-            final_simulator_state = wave_function_simulator.WaveFunctionSimulatorState(qubit_map=self._qubit_map,state_vector=state_vector)
-            trial_results.append(
-                wave_function_simulator.WaveFunctionTrialResult(
-                    params=param_resolver,
-                    measurements=measurements,
-                    final_simulator_state=final_simulator_state))
+            os.remove(csv_name)
 
             print("post time = ")
             print(time.time() - post_start)
 
-        return trial_results
+            yield sparse_simulator.SparseSimulatorStep(
+                state_vector=state_vector,
+                measurements=measurements,
+                qubit_map=self._qubit_map,
+                dtype=self._dtype)
