@@ -12,28 +12,26 @@ import numpy as np
 import math
 
 def main():
-    q0, q1, q2 = cirq.LineQubit.range(3)
-    for iteration in range(2):
-        random_circuit = cirq.testing.random_circuit(qubits=[q0, q1, q2],
-                                                     n_moments=8,
+
+    q0,q1,q2,q3 = cirq.LineQubit.range(4)
+    for iteration in range(4):
+        random_circuit = cirq.testing.random_circuit(qubits=[q0,q1,q2,q3],
+                                                     n_moments=32,
                                                      op_density=0.99)
         simulator = cirq.KnowledgeCompilationSimulator(random_circuit)
         circuit_unitary = []
-        for x in range(8):
+        for x in range(16):
             result = simulator.simulate(random_circuit,
-                                        qubit_order=[q0, q1, q2],
                                         initial_state=x)
             circuit_unitary.append(result.final_state)
 
         print ("np.transpose(circuit_unitary) = ")
         print (np.transpose(circuit_unitary))
-        print ("random_circuit.unitary(qubit_order=[q0, q1, q2]) = ")
-        print (random_circuit.unitary(qubit_order=[q0, q1, q2]))
-        print("iteration=")
-        print(iteration)
+        print ("random_circuit.unitary() = ")
+        print (random_circuit.unitary())
         np.testing.assert_almost_equal(
             np.transpose(circuit_unitary),
-            random_circuit.unitary(qubit_order=[q0, q1, q2]),
+            random_circuit.unitary(),
             decimal=4)
 
     # # Pick a qubit.
