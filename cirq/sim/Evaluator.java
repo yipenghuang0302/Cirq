@@ -133,8 +133,10 @@ public class Evaluator {
           // }
 
           // Finally, write the results to out file.
-          if (amplitude.getImaginary()<0) {
+          if ( amplitude.getImaginary()<0 ) {
             csv.write(outputQubitString+","+amplitude.getReal()+""+amplitude.getImaginary()+"j"+","+probabilitySum+","+evidenceDuration+","+evaluationDuration);
+          } else if ( amplitude.getImaginary()==0 ) {
+            csv.write(outputQubitString+","+amplitude.getReal()+","+probabilitySum+","+evidenceDuration+","+evaluationDuration);
           } else {
             csv.write(outputQubitString+","+amplitude.getReal()+"+"+amplitude.getImaginary()+"j"+","+probabilitySum+","+evidenceDuration+","+evaluationDuration);
           }
