@@ -260,31 +260,47 @@ potential ( {target_posterior} | '''
         self._hash_to_symbols = {}
         for moment_index, moment in enumerate(circuit, start=1):
             for op in moment:
-                transposed_cpts = self._unitary_to_transposed_cpt( op.gate, protocols.unitary(op) )
 
-                for target_qubit, transposed_cpt in zip(reversed(op.qubits), reversed(transposed_cpts)):
+                if isinstance(op,ops.PauliString) or \
+                not isinstance(op,(ops.PauliStringExpectation, ops.ApproxPauliStringExpectation)) and not isinstance(op.gate,ops.MeasurementGate):
 
-                    node_string = self.net_prelude
+                    if isinstance(op,ops.PauliString):
+                        gate = None
+                    else:
+                        gate = op.gate
 
-                    parents=[]
-                    for control_qubit in op.qubits:
-                        depth = str(qubit_to_last_gate_index[control_qubit]).zfill(4)
-                        parent = 'n' + depth + 'q' + str(control_qubit).zfill(4)
-                        node_string += parent + ' '
-                        parents.append(parent)
-                    node_string += self.net_interlude
-                    node_string += self._net_data_format ( parents, 0 )
-                    node_string += self.net_postlude
+                    if protocols.has_mixture(op):
+                        unitary_matrix = [[0+0j,0+0j],[0+0j,0+0j]]
+                        for component in protocols.mixture(op):
+                            unitary_matrix += component[0] * component[1]
+                    else:
+                        unitary_matrix = protocols.unitary(op)
 
-                    target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(target_qubit).zfill(4)
-                    net_file.write(node_string.format(
-                        target_posterior=target_posterior,
-                        data=self._cpt_to_cpp_complex_hash(transposed_cpt.transpose())
-                        ))
+                    transposed_cpts = self._unitary_to_transposed_cpt( gate, unitary_matrix )
 
-                # update depth
-                for target_qubit, transposed_cpt in zip(reversed(op.qubits), reversed(transposed_cpts)):
-                    qubit_to_last_gate_index[target_qubit] = moment_index
+                    for target_qubit, transposed_cpt in zip(reversed(op.qubits), reversed(transposed_cpts)):
+
+                        node_string = self.net_prelude
+
+                        parents=[]
+                        for control_qubit in op.qubits:
+                            depth = str(qubit_to_last_gate_index[control_qubit]).zfill(4)
+                            parent = 'n' + depth + 'q' + str(control_qubit).zfill(4)
+                            node_string += parent + ' '
+                            parents.append(parent)
+                        node_string += self.net_interlude
+                        node_string += self._net_data_format ( parents, 0 )
+                        node_string += self.net_postlude
+
+                        target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(target_qubit).zfill(4)
+                        net_file.write(node_string.format(
+                            target_posterior=target_posterior,
+                            data=self._cpt_to_cpp_complex_hash(transposed_cpt.transpose())
+                            ))
+
+                    # update depth
+                    for target_qubit, transposed_cpt in zip(reversed(op.qubits), reversed(transposed_cpts)):
+                        qubit_to_last_gate_index[target_qubit] = moment_index
 
         net_file.close()
 
@@ -335,7 +351,47 @@ potential ( {target_posterior} | '''
         circuit: circuits.Circuit,
         param_resolver: study.ParamResolver,
         repetitions: int) -> Dict[str, List[np.ndarray]]:
-        pass
+        """See definition in `cirq.SimulatesSamples`."""
+        param_resolver = param_resolver or study.ParamResolver({})
+        def measure_or_mixture(op):
+            return protocols.is_measurement(op) or protocols.has_mixture(op)
+        if circuit.are_all_matches_terminal(measure_or_mixture):
+            return self._run_sweep_sample(circuit, param_resolver, repetitions)
+        return self._run_sweep_repeat(param_resolver, repetitions)
+
+    def _run_sweep_sample(
+        self,
+        circuit: circuits.Circuit,
+        param_resolver: study.ParamResolver,
+        repetitions: int) -> Dict[str, List[np.ndarray]]:
+        for step_result in self._base_iterator(
+                param_resolver=param_resolver,
+                initial_state=0,
+                perform_measurements=False):
+            pass
+        # We can ignore the mixtures since this is a run method which
+        # does not return the state.
+        measurement_ops = [op for _, op, _ in
+                           circuit.findall_operations_with_gate_type(
+                                   ops.MeasurementGate)]
+        return step_result.sample_measurement_ops(measurement_ops, repetitions)
+
+    def _run_sweep_repeat(
+        self,
+        param_resolver: study.ParamResolver,
+        repetitions: int) -> Dict[str, List[np.ndarray]]:
+        measurements = {}  # type: Dict[str, List[np.ndarray]]
+        for _ in range(repetitions):
+            all_step_results = self._base_iterator(
+                    param_resolver=param_resolver,
+                    initial_state=0)
+
+            for step_result in all_step_results:
+                for k, v in step_result.measurements.items():
+                    if not k in measurements:
+                        measurements[k] = []
+                    measurements[k].append(np.array(v, dtype=bool))
+        return {k: np.array(v) for k, v in measurements.items()}
 
     def _simulator_iterator(
             self,
@@ -352,89 +408,123 @@ potential ( {target_posterior} | '''
         must be the correct size, be normalized (an L2 norm of 1), and
         be safely castable to an appropriate dtype for the simulator.
         """
-        prep_start = time.time()
-
+        param_resolver = param_resolver or study.ParamResolver({})
         if self._initial_state_lockout and initial_state is not None:
             raise Exception(f'Do not supply initial_state in both initialization and simulation.')
         actual_initial_state = 0 if initial_state is None else initial_state
+        return self._base_iterator(param_resolver,
+                                   actual_initial_state,
+                                   perform_measurements=True)
+
+    def _base_iterator(
+            self,
+            param_resolver: study.ParamResolver,
+            initial_state: Union[int, np.ndarray],
+            perform_measurements: bool=True,
+    ) -> Iterator:
+
         if len(self._circuit) == 0:
-            return sparse_simulator.SparseSimulatorStep(
-                wave_function.to_valid_state_vector(actual_initial_state,self._num_qubits,self._dtype),
+            yield sparse_simulator.SparseSimulatorStep(
+                wave_function.to_valid_state_vector(initial_state,self._num_qubits,self._dtype),
                 {},
                 self._qubit_map,
                 self._dtype)
 
-        self._param_dict = {}
-        for target_qubit, initial_value in zip (
-            self._qubits,
-            # to adhere to Cirq's endian convention:
-            [bool(actual_initial_state & (1<<n)) for n in reversed(range(self._num_qubits))]
-            ):
-            qi0_sym = 'i0'+'q'+str(target_qubit).zfill(4)
-            self._param_dict[ hash(qi0_sym)%(1<<28) ] = '0' if initial_value else '1'
-            qi1_sym = 'i1'+'q'+str(target_qubit).zfill(4)
-            self._param_dict[ hash(qi1_sym)%(1<<28) ] = '1' if initial_value else '0'
+        else:
 
-        param_resolver = param_resolver or study.ParamResolver({})
-        self._hash_csv = int(hash((self._subprocess, param_resolver)))
-        for hash_key, symbols in self._hash_to_symbols.items():
-            self._param_dict[hash_key] = self._to_java_complex(protocols.resolve_parameters(symbols, param_resolver))
+            prep_start = time.time()
 
-        print("prep time = ")
-        print(time.time() - prep_start)
+            param_dict = {}
+            for target_qubit, initial_value in zip (
+                self._qubits,
+                # to adhere to Cirq's endian convention:
+                [bool(initial_state & (1<<n)) for n in reversed(range(self._num_qubits))]
+                ):
+                qi0_sym = 'i0'+'q'+str(target_qubit).zfill(4)
+                param_dict[ hash(qi0_sym)%(1<<28) ] = '0' if initial_value else '1'
+                qi1_sym = 'i1'+'q'+str(target_qubit).zfill(4)
+                param_dict[ hash(qi1_sym)%(1<<28) ] = '1' if initial_value else '0'
 
-        return self._base_iterator( actual_initial_state )
+            param_resolver = param_resolver or study.ParamResolver({})
+            hash_csv = int(hash((self._subprocess, param_resolver)))
+            for hash_key, symbols in self._hash_to_symbols.items():
+                param_dict[hash_key] = self._to_java_complex(protocols.resolve_parameters(symbols, param_resolver))
 
-    def _base_iterator( self, initial_state: Union[int, np.ndarray] ) -> Iterator:
+            print("prep time = ")
+            print(time.time() - prep_start)
 
-        java_start = time.time()
+            for moment_index, moment in enumerate(self._circuit, start=1):
 
-        for moment_index, moment in enumerate(self._circuit, start=1):
+                java_start = time.time()
 
-            csv_basename = f'{self._hash_csv}_{initial_state:04d}_{moment_index:04d}'
-            self._subprocess.stdin.write(f'cc$B${csv_basename}\n'.encode())
-            self._subprocess.stdin.write(f'cc$M${moment_index}\n'.encode())
+                csv_basename = f'{hash_csv}_{initial_state:04d}_{moment_index:04d}'
+                self._subprocess.stdin.write(f'cc$B${csv_basename}\n'.encode())
+                self._subprocess.stdin.write(f'cc$M${moment_index}\n'.encode())
 
-            with open('circuit.lmap', 'r') as lmap_file:
-                for line in lmap_file:
-                    int_strings = self._int_re_compile.findall(line)
-                    for int_string in int_strings:
-                        if int(int_string) in self._param_dict:
-                            line = re.sub(int_string, self._param_dict[int(int_string)], line)
-                    node_string = self._node_re_compile.findall(line)
-                    if node_string and int(node_string[0])>moment_index:
-                        line = re.sub(r'\+', 'I', line)
-                    self._subprocess.stdin.write(line.encode())
+                with open('circuit.lmap', 'r') as lmap_file:
+                    for line in lmap_file:
+                        int_strings = self._int_re_compile.findall(line)
+                        for int_string in int_strings:
+                            if int(int_string) in param_dict:
+                                line = re.sub(int_string, param_dict[int(int_string)], line)
+                        node_string = self._node_re_compile.findall(line)
+                        if node_string and int(node_string[0])>moment_index:
+                            line = re.sub(r'\+', 'I', line)
+                        self._subprocess.stdin.write(line.encode())
 
-            measurements = collections.defaultdict(
-                    list)  # type: Dict[str, List[bool]]
+                measurements = collections.defaultdict(
+                        list)  # type: Dict[str, List[bool]]
 
-            csv_name = f'{csv_basename}.csv'
-            while not os.path.exists(csv_name):
-                self._subprocess.stdin.write(b'\n') # keep pushing the BufferedReader
+                csv_name = f'{csv_basename}.csv'
+                while not os.path.exists(csv_name):
+                    self._subprocess.stdin.write(b'\n') # keep pushing the BufferedReader
 
-            print("java time = ")
-            print(time.time() - java_start)
-            post_start = time.time()
+                print("java time = ")
+                print(time.time() - java_start)
+                post_start = time.time()
 
-            state_vector = []
-            outputQubitString = 0
-            with open(csv_name, 'r') as csv_file:
-                for outputQubitString in range(1<<self._num_qubits):
-                    line = csv_file.readline()
-                    row = line.split(',')
-                    assert int(row[0]) == outputQubitString
-                    # print (row)
-                    # print (row[1])
-                    state_vector.append(complex(row[1]))
-            assert float(row[2])-1.0 < 1.0/256.0
-            os.remove(csv_name)
+                state_vector = []
+                outputQubitString = 0
+                with open(csv_name, 'r') as csv_file:
+                    for outputQubitString in range(1<<self._num_qubits):
+                        line = csv_file.readline()
+                        row = line.split(',')
+                        assert int(row[0]) == outputQubitString
+                        state_vector.append(complex(row[1]))
+                assert float(row[2])-1.0 < 1.0/256.0
+                os.remove(csv_name)
 
-            print("post time = ")
-            print(time.time() - post_start)
+                for op in moment:
+                    indices = [self._qubit_map[qubit] for qubit in op.qubits]
+                    if protocols.is_measurement(op):
+                        # Do measurements second, since there may be mixtures that
+                        # operate as measurements.
+                        # TODO: support measurement outside the computational basis.
+                        if perform_measurements:
+                            self._simulate_measurement(op, np.reshape(state_vector, (2,) * self._num_qubits), indices,
+                                                       measurements, self._num_qubits)
 
-            yield sparse_simulator.SparseSimulatorStep(
-                state_vector=state_vector,
-                measurements=measurements,
-                qubit_map=self._qubit_map,
-                dtype=self._dtype)
+                print("post time = ")
+                print(time.time() - post_start)
+
+                yield sparse_simulator.SparseSimulatorStep(
+                    state_vector=state_vector,
+                    measurements=measurements,
+                    qubit_map=self._qubit_map,
+                    dtype=self._dtype)
+
+    def _simulate_measurement(self, op: ops.Operation, data,
+            indices: List[int], measurements: Dict[str, List[bool]],
+            num_qubits: int) -> None:
+        """Simulate an op that is a measurement in the computataional basis."""
+        meas = ops.op_gate_of_type(op, ops.MeasurementGate)
+        # TODO: support measurement outside computational basis.
+        if meas:
+            invert_mask = meas.full_invert_mask()
+            # Measure updates inline.
+            bits, _ = wave_function.measure_state_vector(data,
+                                                         indices,
+                                                         data)
+            corrected = [bit ^ mask for bit, mask in zip(bits, invert_mask)]
+            key = protocols.measurement_key(meas)
+            measurements[key].extend(corrected)
