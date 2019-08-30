@@ -105,6 +105,7 @@ class Circuit:
         self._moments = list(moments)
         self._device = device
         self._device.validate_circuit(self)
+        self._validate_op_tree_qids(self)
 
     @property
     def device(self) -> devices.Device:
@@ -201,6 +202,7 @@ class Circuit:
             if not isinstance(value, ops.Moment):
                 raise TypeError('Can only assign Moments into Circuits.')
             self._device.validate_moment(value)
+            self._validate_op_tree_qids(value)
 
         if isinstance(key, slice):
             value = list(value)
@@ -208,6 +210,7 @@ class Circuit:
                 raise TypeError('Can only assign Moments into Circuits.')
             for moment in value:
                 self._device.validate_moment(moment)
+                self._validate_op_tree_qids(moment)
 
         self._moments[key] = value
     # pylint: enable=function-redefined
@@ -463,23 +466,42 @@ class Circuit:
 
         The location L = (qubit, moment_index) is *reachable* if and only if:
 
-            a) L is one of the items in `start_frontier`.
+            a) There is not a blocking operation covering L.
+
+            AND
+
+            [
+                b1) qubit is in start frontier and moment_index =
+                    max(start_frontier[qubit], 0).
+
+                OR
+
+                b2) There is no operation at L and prev(L) = (qubit,
+                    moment_index-1) is reachable.
+
+                OR
+
+                b3) There is an (non-blocking) operation P covering L such that
+                    (q', moment_index - 1) is reachable for every q' on which P
+                    acts.
+            ]
+
+        An operation in moment moment_index is blocking if
+
+            a) `is_blocker` returns a truthy value.
 
             OR
 
-            b) There is no operation at L and prev(L) = (qubit, moment_index-1)
-                is reachable and L is within the bounds of the circuit.
+            b) The operation acts on a qubit not in start_frontier.
 
             OR
 
-            c) There is an operation P covering L and, for every location
-                M = (q', moment_index) that P covers, the location
-                prev(M) = (q', moment_index-1) is reachable. Also, P must not be
-                classified as a blocker by the given `is_blocker` argument.
+            c) The operation acts on a qubit q such that start_frontier[q] >
+                moment_index.
 
         In other words, the reachable region extends forward through time along
-        each qubit until it hits a blocked operation or an operation that
-        crosses into the set of not-involved-at-the-moment qubits.
+        each qubit in start_frontier until it hits a blocking operation. Any
+        location involving a qubit not in start_frontier is unreachable.
 
         For each qubit q in `start_frontier`, the reachable locations will
         correspond to a contiguous range starting at start_frontier[q] and
@@ -852,6 +874,27 @@ class Circuit:
                           operation: ops.Operation) -> bool:
         return not self._moments[moment_index].operates_on(operation.qubits)
 
+    def _validate_op_tree_qids(self, op_tree: ops.OP_TREE) -> None:
+        """Raises an exception if any operation in `op_tree` has qids that don't
+        match its qid shape.
+
+        Args:
+            operation: The operation to validate.
+
+        Raises:
+            ValueError: The operation had qids that don't match its qid shape.
+        """
+        # Cast from Iterable[Operation, Moment] because preserve_moments is
+        # False.
+        for op in cast(Iterable[ops.Operation], ops.flatten_op_tree(op_tree)):
+            if protocols.qid_shape(op) != protocols.qid_shape(op.qubits):
+                raise ValueError(
+                    'Invalid operation. '
+                    'An operation has qid shape <{!r}> but is on qids with '
+                    'shape <{!r}>. The operation is <{!r}>.'.format(
+                        protocols.qid_shape(op), protocols.qid_shape(op.qubits),
+                        op))
+
     def insert(
             self,
             index: int,
@@ -886,6 +929,7 @@ class Circuit:
             else:
                 self._device.validate_operation(
                     cast(ops.Operation, moment_or_op))
+            self._validate_op_tree_qids(moment_or_op)
 
         # limit index to 0..len(self._moments), also deal with indices smaller 0
         k = max(min(index if index >= 0 else len(self._moments) + index,
@@ -934,6 +978,7 @@ class Circuit:
         operations = list(ops.flatten_op_tree(operations))
         for op in operations:
             self._device.validate_operation(op)
+        self._validate_op_tree_qids(operations)
 
         i = start
         op_index = 0
@@ -1142,6 +1187,7 @@ class Circuit:
         for i, op in insert_intos:
             copy._moments[i] = copy._moments[i].with_operation(op)
         self._device.validate_circuit(copy)
+        self._validate_op_tree_qids(copy)
         self._moments = copy._moments
 
     def batch_insert(self,
@@ -1226,11 +1272,15 @@ class Circuit:
         """
         return (op for moment in self for op in moment.operations)
 
-    def _qid_shape_(self):
-        return ops.max_qid_shape(
-            self._moments,
-            qubits_that_should_be_present=self.all_qubits(),
-            default_level=1)
+    def qid_shape(self,
+                  qubit_order: ops.QubitOrderOrList = ops.QubitOrder.DEFAULT
+                 ) -> Tuple[int, ...]:
+        qids = ops.QubitOrder.as_qubit_order(qubit_order).order_for(
+            self.all_qubits())
+        return protocols.qid_shape(qids)
+
+    def _qid_shape_(self) -> Tuple[int, ...]:
+        return self.qid_shape()
 
     def _has_unitary_(self) -> bool:
         if not self.are_all_measurements_terminal():
@@ -1303,7 +1353,7 @@ class Circuit:
             self.all_qubits().union(qubits_that_should_be_present))
 
         # Force qubits to have dimension at least 2 for backwards compatibility.
-        qid_shape = ops.max_qid_shape(self, qubit_order=qs, default_level=2)
+        qid_shape = self.qid_shape(qubit_order=qs)
         side_len = np.product(qid_shape, dtype=int)
 
         state = linalg.eye_tensor(qid_shape, dtype=dtype)
@@ -1377,7 +1427,7 @@ class Circuit:
             self.all_qubits().union(qubits_that_should_be_present))
 
         # Force qubits to have dimension at least 2 for backwards compatibility.
-        qid_shape = ops.max_qid_shape(self, qubit_order=qs, default_level=2)
+        qid_shape = self.qid_shape(qubit_order=qs)
         state_len = np.product(qid_shape, dtype=int)
 
         if isinstance(initial_state, int):
@@ -1577,6 +1627,13 @@ class Circuit:
                 register.
         """
         self._to_qasm_output(header, precision, qubit_order).save(file_path)
+
+    @property
+    def moments(self):
+        return self._moments
+
+    def _json_dict_(self):
+        return protocols.to_json_dict(self, ['moments', 'device'])
 
 
 def _resolve_operations(
