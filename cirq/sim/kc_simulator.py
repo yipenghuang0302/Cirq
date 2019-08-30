@@ -320,7 +320,7 @@ potential ( {target_posterior} | '''
         try:
             # Conjunctive normal form to arithmetic circuit
             bestFileSize = sys.maxsize
-            for _ in range(4):
+            for _ in range(1):
                 stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -simplify_s -in circuit.cnf')
                 stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -reduce -dt_method 3 -in circuit.cnf_simplified')
                 # -keep_trivial_cls
@@ -364,17 +364,25 @@ potential ( {target_posterior} | '''
         circuit: circuits.Circuit,
         param_resolver: study.ParamResolver,
         repetitions: int) -> Dict[str, List[np.ndarray]]:
-        for step_result in self._base_iterator(
+
+        self._repetitions = repetitions
+        self._subprocess.stdin.write(f'cc$R${self._repetitions}\n'.encode())
+
+        measurements = {}  # type: Dict[str, List[np.ndarray]]
+
+        all_step_results = self._base_iterator(
                 param_resolver=param_resolver,
-                initial_state=0,
-                perform_measurements=False):
+                initial_state=0)
+
+        for step_result in all_step_results:
             pass
-        # We can ignore the mixtures since this is a run method which
-        # does not return the state.
-        measurement_ops = [op for _, op, _ in
-                           circuit.findall_operations_with_gate_type(
-                                   ops.MeasurementGate)]
-        return step_result.sample_measurement_ops(measurement_ops, repetitions)
+        return step_result.measurements
+        # for step_result in all_step_results:
+        #     for k, v in step_result.measurements.items():
+        #         if not k in measurements:
+        #             measurements[k] = []
+        #         measurements[k].append(np.array(v, dtype=bool))
+        # return {k: np.array(v) for k, v in measurements.items()}
 
     def _run_sweep_repeat(
         self,
@@ -392,6 +400,59 @@ potential ( {target_posterior} | '''
                         measurements[k] = []
                     measurements[k].append(np.array(v, dtype=bool))
         return {k: np.array(v) for k, v in measurements.items()}
+
+    def compute_amplitudes_sweep(
+            self,
+            program: Union[circuits.Circuit, schedules.Schedule],
+            bitstrings: np.ndarray,
+            params: study.Sweepable,
+            qubit_order: ops.QubitOrderOrList = ops.QubitOrder.DEFAULT,
+    ) -> List[List[complex]]:
+
+        self._amplitude_indices = [
+            wave_function_simulator._bitstring_to_integer(bitstring) for bitstring in bitstrings
+        ]
+
+        for amplitude_index in self._amplitude_indices:
+            self._subprocess.stdin.write(f'cc$A${amplitude_index}\n'.encode())
+
+        return wave_function_simulator.SimulatesIntermediateWaveFunction.compute_amplitudes_sweep(
+            self, program, bitstrings, params, qubit_order)
+
+    def simulate_sweep(
+        self,
+        program: Union[circuits.Circuit, schedules.Schedule],
+        params: study.Sweepable,
+        qubit_order: ops.QubitOrderOrList = ops.QubitOrder.DEFAULT,
+        initial_state: Any = None,
+    ) -> List['SimulationTrialResult']:
+        """Simulates the supplied Circuit or Schedule.
+
+        This method returns a result which allows access to the entire
+        wave function. In contrast to simulate, this allows for sweeping
+        over different parameter values.
+
+        Args:
+            program: The circuit or schedule to simulate.
+            params: Parameters to run with the program.
+            qubit_order: Determines the canonical ordering of the qubits. This
+                is often used in specifying the initial state, i.e. the
+                ordering of the computational basis states.
+            initial_state: The initial state for the simulation. The form of
+                this state depends on the simulation implementation. See
+                documentation of the implementing class for details.
+
+        Returns:
+            List of SimulationTrialResults for this run, one for each
+            possible parameter resolver.
+        """
+        self._simulate_sweep_flag = None
+        return simulator.SimulatesIntermediateState.simulate_sweep(
+            self,
+            program,
+            params,
+            qubit_order,
+            initial_state)
 
     def _simulator_iterator(
             self,
@@ -453,65 +514,109 @@ potential ( {target_posterior} | '''
             print("prep time = ")
             print(time.time() - prep_start)
 
+            if hasattr(self,'_simulate_sweep_flag') or hasattr(self,'_repetitions'):
+                for last_moment_index, moment in enumerate(self._circuit, start=1):
+                    pass
+
             for moment_index, moment in enumerate(self._circuit, start=1):
 
-                java_start = time.time()
+                if (hasattr(self,'_simulate_sweep_flag') or hasattr(self,'_repetitions')) and moment_index != last_moment_index:
+                    pass
+                else:
 
-                csv_basename = f'{hash_csv}_{initial_state:04d}_{moment_index:04d}'
-                self._subprocess.stdin.write(f'cc$B${csv_basename}\n'.encode())
-                self._subprocess.stdin.write(f'cc$M${moment_index}\n'.encode())
+                    java_start = time.time()
 
-                with open('circuit.lmap', 'r') as lmap_file:
-                    for line in lmap_file:
-                        int_strings = self._int_re_compile.findall(line)
-                        for int_string in int_strings:
-                            if int(int_string) in param_dict:
-                                line = re.sub(int_string, param_dict[int(int_string)], line)
-                        node_string = self._node_re_compile.findall(line)
-                        if node_string and int(node_string[0])>moment_index:
-                            line = re.sub(r'\+', 'I', line)
-                        self._subprocess.stdin.write(line.encode())
+                    csv_basename = f'{hash_csv}_{initial_state:04d}_{moment_index:04d}'
+                    self._subprocess.stdin.write(f'cc$B${csv_basename}\n'.encode())
+                    self._subprocess.stdin.write(f'cc$M${moment_index}\n'.encode())
 
-                measurements = collections.defaultdict(
-                        list)  # type: Dict[str, List[bool]]
+                    with open('circuit.lmap', 'r') as lmap_file:
+                        for line in lmap_file:
+                            int_strings = self._int_re_compile.findall(line)
+                            for int_string in int_strings:
+                                if int(int_string) in param_dict:
+                                    line = re.sub(int_string, param_dict[int(int_string)], line)
+                            node_string = self._node_re_compile.findall(line)
+                            if node_string and int(node_string[0])>moment_index:
+                                line = re.sub(r'\+', 'I', line)
+                            self._subprocess.stdin.write(line.encode())
 
-                csv_name = f'{csv_basename}.csv'
-                while not os.path.exists(csv_name):
-                    self._subprocess.stdin.write(b'\n') # keep pushing the BufferedReader
+                    measurements = collections.defaultdict(
+                            list)  # type: Dict[str, List[bool]]
 
-                print("java time = ")
-                print(time.time() - java_start)
-                post_start = time.time()
+                    csv_name = f'{csv_basename}.csv'
+                    while not os.path.exists(csv_name):
+                        self._subprocess.stdin.write(b'\n') # keep pushing the BufferedReader
 
-                state_vector = []
-                outputQubitString = 0
-                with open(csv_name, 'r') as csv_file:
-                    for outputQubitString in range(1<<self._num_qubits):
-                        line = csv_file.readline()
-                        row = line.split(',')
-                        assert int(row[0]) == outputQubitString
-                        state_vector.append(complex(row[1]))
-                assert float(row[2])-1.0 < 1.0/256.0
-                os.remove(csv_name)
+                    print("java time = ")
+                    print(time.time() - java_start)
+                    post_start = time.time()
 
-                for op in moment:
-                    indices = [self._qubit_map[qubit] for qubit in op.qubits]
-                    if protocols.is_measurement(op):
-                        # Do measurements second, since there may be mixtures that
-                        # operate as measurements.
-                        # TODO: support measurement outside the computational basis.
-                        if perform_measurements:
-                            self._simulate_measurement(op, np.reshape(state_vector, (2,) * self._num_qubits), indices,
-                                                       measurements, self._num_qubits)
+                    state_vector = []
+                    outputQubitString = 0
+                    with open(csv_name, 'r') as csv_file:
+                        if hasattr(self, '_repetitions'):
+                            for outputQubitString in range(1<<self._num_qubits):
+                                state_vector.append(0)
+                            def tobin(x,s):
+                                return [(x>>k)&1 for k in reversed(range(0,s))]
+                            for repetition in range(self._repetitions):
+                                line = csv_file.readline()
+                                row = line.split(',')
+                                # print (row)
+                                # print (row[0])
+                                bin_list = tobin(int(row[0]),self._num_qubits)
+                                for op in moment:
+                                    indices = [self._qubit_map[qubit] for qubit in op.qubits]
+                                    if protocols.is_measurement(op):
+                                        meas = ops.op_gate_of_type(op, ops.MeasurementGate)
+                                        if meas:
+                                            invert_mask = meas.full_invert_mask()
+                                            bits = [bin_list[index] for index in indices]
+                                            corrected = [bit ^ mask for bit, mask in zip(bits, invert_mask)]
+                                            key = protocols.measurement_key(meas)
+                                            measurements[key].append(corrected)
+                        else:
+                            for outputQubitString in range(1<<self._num_qubits):
+                                if hasattr(self, '_amplitude_indices'):
+                                    if outputQubitString in self._amplitude_indices:
+                                        line = csv_file.readline()
+                                        row = line.split(',')
+                                        # print (row)
+                                        # print (row[0])
+                                        assert int(row[0]) == outputQubitString
+                                        state_vector.append(complex(row[1]))
+                                    else:
+                                        state_vector.append(0)
+                                else:
+                                    line = csv_file.readline()
+                                    row = line.split(',')
+                                    # print (row)
+                                    # print (row[0])
+                                    assert int(row[0]) == outputQubitString
+                                    state_vector.append(complex(row[1]))
+                    # assert float(row[2])-1.0 < 1.0/256.0
+                    os.remove(csv_name)
 
-                print("post time = ")
-                print(time.time() - post_start)
+                    if not hasattr(self, '_repetitions'):
+                        for op in moment:
+                            indices = [self._qubit_map[qubit] for qubit in op.qubits]
+                            if protocols.is_measurement(op):
+                                # Do measurements second, since there may be mixtures that
+                                # operate as measurements.
+                                # TODO: support measurement outside the computational basis.
+                                if perform_measurements:
+                                    self._simulate_measurement(op, np.reshape(state_vector, (2,) * self._num_qubits), indices,
+                                                               measurements, self._num_qubits)
 
-                yield sparse_simulator.SparseSimulatorStep(
-                    state_vector=state_vector,
-                    measurements=measurements,
-                    qubit_map=self._qubit_map,
-                    dtype=self._dtype)
+                    print("post time = ")
+                    print(time.time() - post_start)
+
+                    yield sparse_simulator.SparseSimulatorStep(
+                        state_vector=state_vector,
+                        measurements=measurements,
+                        qubit_map=self._qubit_map,
+                        dtype=self._dtype)
 
     def _simulate_measurement(self, op: ops.Operation, data,
             indices: List[int], measurements: Dict[str, List[bool]],
