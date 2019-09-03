@@ -95,7 +95,7 @@ def test_run_invert_mask_measure_not_terminal(dtype):
                 (cirq.X**b0)(q0), (cirq.X**b1)(q1),
                 cirq.measure(q0, q1, key='m', invert_mask=(True, False)),
                 cirq.X(q0))
-            simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
+            simulator = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, dtype=dtype)
             with mock.patch.object(simulator,
                                    '_base_iterator',
                                    wraps=simulator._base_iterator) as mock_sim:
@@ -115,7 +115,7 @@ def test_run_partial_invert_mask_measure_not_terminal(dtype):
                 (cirq.X**b0)(q0), (cirq.X**b1)(q1),
                 cirq.measure(q0, q1, key='m', invert_mask=(True,)),
                 cirq.X(q0))
-            simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
+            simulator = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, dtype=dtype)
             with mock.patch.object(simulator,
                                    '_base_iterator',
                                    wraps=simulator._base_iterator) as mock_sim:
@@ -137,7 +137,7 @@ def test_run_repetitions_measurement_not_terminal(dtype):
                                             cirq.measure(q1),
                                             cirq.H(q0),
                                             cirq.H(q1))
-            simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
+            simulator = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, dtype=dtype)
             with mock.patch.object(simulator, '_base_iterator',
                                    wraps=simulator._base_iterator) as mock_sim:
                 result = simulator.run(circuit, repetitions=3)
@@ -168,7 +168,7 @@ def test_run_param_resolver(dtype):
 def test_run_mixture(dtype):
     q0 = cirq.LineQubit(0)
     circuit = cirq.Circuit.from_ops(cirq.bit_flip(0.5)(q0), cirq.measure(q0))
-    simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
+    simulator = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, dtype=dtype)
     result = simulator.run(circuit, repetitions=100)
     assert sum(result.measurements['0'])[0] < 80
     assert sum(result.measurements['0'])[0] > 20
@@ -179,7 +179,7 @@ def test_run_mixture_with_gates(dtype):
     q0 = cirq.LineQubit(0)
     circuit = cirq.Circuit.from_ops(cirq.H(q0), cirq.phase_flip(0.5)(q0),
                                     cirq.H(q0), cirq.measure(q0))
-    simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
+    simulator = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, dtype=dtype)
     result = simulator.run(circuit, repetitions=100)
     assert sum(result.measurements['0'])[0] < 80
     assert sum(result.measurements['0'])[0] > 20
@@ -401,7 +401,7 @@ def test_simulate_moment_steps(dtype):
     q0, q1 = cirq.LineQubit.range(2)
     circuit = cirq.Circuit.from_ops(cirq.H(q0), cirq.H(q1), cirq.H(q0),
                                     cirq.H(q1))
-    simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
+    simulator = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, dtype=dtype)
     for i, step in enumerate(simulator.simulate_moment_steps(circuit)):
         if i == 0:
             np.testing.assert_almost_equal(step.state_vector(),
@@ -438,7 +438,7 @@ def test_simulate_moment_steps_empty_circuit(dtype):
 def test_simulate_moment_steps_sample(dtype):
     q0, q1 = cirq.LineQubit.range(2)
     circuit = cirq.Circuit.from_ops(cirq.H(q0), cirq.CNOT(q0, q1))
-    simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
+    simulator = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, dtype=dtype)
     for i, step in enumerate(simulator.simulate_moment_steps(circuit)):
         if i == 0:
             samples = step.sample([q0, q1], repetitions=10)
@@ -511,7 +511,7 @@ def test_compute_displays(dtype):
             key='approx_z1x2'
         ),
     )
-    simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
+    simulator = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, dtype=dtype)
     result = simulator.compute_displays(circuit)
 
     np.testing.assert_allclose(result.display_values['z3'], 1, atol=1e-7)
@@ -610,17 +610,17 @@ def test_simulator_step_state_mixin():
     assert result.dirac_notation() == '|01⟩'
 
 
-# class MultiHTestGate(cirq.TwoQubitGate):
-#     def _decompose_(self, qubits):
-#         return cirq.H.on_each(*qubits)
-#
-#
-# def test_simulates_composite():
-#     c = cirq.Circuit.from_ops(MultiHTestGate().on(*cirq.LineQubit.range(2)))
-#     expected = np.array([0.5] * 4)
-#     np.testing.assert_allclose(c.final_wavefunction(), expected)
-#     np.testing.assert_allclose(cirq.KnowledgeCompilationSimulator(c).simulate(c).state_vector(),
-#                                expected)
+class MultiHTestGate(cirq.TwoQubitGate):
+    def _decompose_(self, qubits):
+        return cirq.H.on_each(*qubits)
+
+
+def test_simulates_composite():
+    c = cirq.Circuit.from_ops(MultiHTestGate().on(*cirq.LineQubit.range(2)))
+    expected = np.array([0.5] * 4)
+    np.testing.assert_allclose(c.final_wavefunction(), expected)
+    np.testing.assert_allclose(cirq.KnowledgeCompilationSimulator(c).simulate(c).state_vector(),
+                               expected)
 
 
 # def test_simulate_measurement_inversions():
@@ -633,14 +633,14 @@ def test_simulator_step_state_mixin():
 #     assert cirq.KnowledgeCompilationSimulator(c).simulate(c).measurements == {'q': np.array([False])}
 
 
-# def test_works_on_pauli_string_phasor():
-#     a, b = cirq.LineQubit.range(2)
-#     c = cirq.Circuit.from_ops(np.exp(1j * np.pi * cirq.X(a) * cirq.X(b)))
-#     sim = cirq.KnowledgeCompilationSimulator(c)
-#     result = sim.simulate(c).state_vector()
-#     np.testing.assert_allclose(result.reshape(4),
-#                                np.array([0, 0, 0, 1j]),
-#                                atol=1e-8)
+def test_works_on_pauli_string_phasor():
+    a, b = cirq.LineQubit.range(2)
+    c = cirq.Circuit.from_ops(np.exp(1j * np.pi * cirq.X(a) * cirq.X(b)))
+    sim = cirq.KnowledgeCompilationSimulator(c, intermediate=True)
+    result = sim.simulate(c).state_vector()
+    np.testing.assert_allclose(result.reshape(4),
+                               np.array([0, 0, 0, 1j]),
+                               atol=1e-8)
 
 
 def test_works_on_pauli_string():
