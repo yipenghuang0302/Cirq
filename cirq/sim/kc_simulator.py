@@ -195,6 +195,7 @@ potential ( {target_posterior} | '''
         program: Union[circuits.Circuit, schedules.Schedule],
         qubit_order: ops.QubitOrderOrList = ops.QubitOrder.DEFAULT,
         initial_state: Any = None,
+        intermediate: bool = False, # whether or not moment steps, intermediate measurement allowed.
         dtype=np.complex64):
         """A sparse matrix simulator.
 
@@ -206,16 +207,19 @@ potential ( {target_posterior} | '''
             raise ValueError(
                 'dtype must be a complex type but was {}'.format(dtype))
         self._dtype = dtype
+        self._intermediate = intermediate
 
         circuit = (program if isinstance(program, circuits.Circuit) else program.to_circuit())
 
-        # optimizers.ExpandComposite().optimize_circuit(circuit)
-        # optimizers.ConvertToCzAndSingleGates().optimize_circuit(circuit) # cannot work with params
-        # optimizers.EjectPhasedPaulis().optimize_circuit(circuit)
+        if not self._intermediate: # messes up moment steps, moment step samping
+            optimizers.ExpandComposite().optimize_circuit(circuit)
+            # optimizers.ConvertToCzAndSingleGates().optimize_circuit(circuit) # cannot work with params
+            optimizers.MergeInteractions().optimize_circuit(circuit)
+            optimizers.MergeSingleQubitGates().optimize_circuit(circuit)
+            optimizers.DropEmptyMoments().optimize_circuit(circuit)
+            optimizers.EjectPhasedPaulis().optimize_circuit(circuit)
+            pass
         optimizers.EjectZ().optimize_circuit(circuit)
-        # optimizers.MergeInteractions().optimize_circuit(circuit)
-        # optimizers.MergeSingleQubitGates().optimize_circuit(circuit)
-        optimizers.DropEmptyMoments().optimize_circuit(circuit)
         # optimizers.DropNegligible().optimize_circuit(circuit)
 
         self._circuit = circuit
@@ -229,7 +233,7 @@ potential ( {target_posterior} | '''
         # initial_state: Union[int, np.ndarray],
         self._initial_state_lockout = False if initial_state is None else True
         # generate Bayesian network nodes with no priors for qubit initialization
-        qubit_to_last_gate_index = {}
+        qubit_to_last_moment_index = {}
         actual_initial_state = 0 if initial_state is None else initial_state
         for target_qubit, initial_value in zip (
             self._qubits,
@@ -237,9 +241,9 @@ potential ( {target_posterior} | '''
             [bool(actual_initial_state & (1<<n)) for n in reversed(range(self._num_qubits))]
             ):
 
-            qubit_to_last_gate_index[target_qubit] = 0
+            qubit_to_last_moment_index[target_qubit] = 0
 
-            target_posterior =  'n' + str(qubit_to_last_gate_index[target_qubit]).zfill(4) + 'q' + str(target_qubit).zfill(4)
+            target_posterior =  'n' + str(qubit_to_last_moment_index[target_qubit]).zfill(4) + 'q' + str(target_qubit).zfill(4)
             node_string = self.net_prelude
             node_string += self.net_interlude
 
@@ -261,10 +265,10 @@ potential ( {target_posterior} | '''
         for moment_index, moment in enumerate(circuit, start=1):
             for op in moment:
 
-                if isinstance(op,ops.PauliString) or \
+                if isinstance(op,(ops.PauliString, ops.PauliStringPhasor)) or \
                 not isinstance(op,(ops.PauliStringExpectation, ops.ApproxPauliStringExpectation)) and not isinstance(op.gate,ops.MeasurementGate):
 
-                    if isinstance(op,ops.PauliString):
+                    if isinstance(op,(ops.PauliString,ops.PauliStringPhasor)):
                         gate = None
                     else:
                         gate = op.gate
@@ -284,7 +288,7 @@ potential ( {target_posterior} | '''
 
                         parents=[]
                         for control_qubit in op.qubits:
-                            depth = str(qubit_to_last_gate_index[control_qubit]).zfill(4)
+                            depth = str(qubit_to_last_moment_index[control_qubit]).zfill(4)
                             parent = 'n' + depth + 'q' + str(control_qubit).zfill(4)
                             node_string += parent + ' '
                             parents.append(parent)
@@ -300,30 +304,48 @@ potential ( {target_posterior} | '''
 
                     # update depth
                     for target_qubit, transposed_cpt in zip(reversed(op.qubits), reversed(transposed_cpts)):
-                        qubit_to_last_gate_index[target_qubit] = moment_index
+                        qubit_to_last_moment_index[target_qubit] = moment_index
 
         net_file.close()
 
         # Bayesian network to conjunctive normal form
         # TODO: autoinstall this
         stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -b -i circuit.net -w -s')
+        # -e: Equal probabilities are encoded is incompatible with dtbnorders
+        # -e and -b used together causes moment steps simulation to fail
         print (stdout)
 
+        self._node_re_compile = re.compile(r'cc\$I\$(\d+)\$1.0\$\+\$n(\d+)q(\d+)') # are negative literals and opt bool valid?
+        self._int_re_compile = re.compile(r'cc\$C\$\d+\$(\d+)')
+        existentially_quantified_variables = []
         with open('circuit.cnf', 'r') as cnf_file:
             with open('circuit.lmap', 'w') as lmap_file:
                 for line in cnf_file:
                     if line.startswith('cc'):
                         lmap_file.write(line)
-        self._int_re_compile = re.compile(r'[-+]?\d+')
-        self._node_re_compile = re.compile(r'n(\d+)')
+                        match = self._node_re_compile.match(line)
+                        if match:
+                            moment = int(match.group(2))
+                            qubit = self._qubits[int(match.group(3))]
+                            if moment<qubit_to_last_moment_index[qubit]:
+                                existentially_quantified_variables.append(match.group(1))
+
+        if not self._intermediate:
+            with open('variables.file', 'w') as exist_file:
+                line = str(len(existentially_quantified_variables))
+                for variable in existentially_quantified_variables:
+                    line += ' ' + variable
+                exist_file.write(line)
 
         try:
             # Conjunctive normal form to arithmetic circuit
             bestFileSize = sys.maxsize
             for _ in range(1):
                 stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -simplify_s -in circuit.cnf')
-                stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -reduce -dt_method 3 -in circuit.cnf_simplified')
-                # -keep_trivial_cls
+                if not self._intermediate:
+                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -exist variables.file -reduce -in circuit.cnf_simplified')
+                else:
+                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -reduce -in circuit.cnf_simplified')
                 # stdout = os.system('/n/fs/qdb/qACE/miniC2D-1.0.0/bin/linux/miniC2D -c circuit.cnf_simplified')
                 print (stdout)
                 currFileSize = os.path.getsize('circuit.cnf_simplified.nnf')
@@ -357,7 +379,10 @@ potential ( {target_posterior} | '''
             return protocols.is_measurement(op) or protocols.has_mixture(op)
         if circuit.are_all_matches_terminal(measure_or_mixture):
             return self._run_sweep_sample(circuit, param_resolver, repetitions)
-        return self._run_sweep_repeat(param_resolver, repetitions)
+        else:
+            if not self._intermediate:
+                raise Exception(f'KnowledgeCompilationSimulator not properly configured for intermediate state simulation.')
+            return self._run_sweep_repeat(param_resolver, repetitions)
 
     def _run_sweep_sample(
         self,
@@ -377,17 +402,15 @@ potential ( {target_posterior} | '''
         for step_result in all_step_results:
             pass
         return step_result.measurements
-        # for step_result in all_step_results:
-        #     for k, v in step_result.measurements.items():
-        #         if not k in measurements:
-        #             measurements[k] = []
-        #         measurements[k].append(np.array(v, dtype=bool))
-        # return {k: np.array(v) for k, v in measurements.items()}
 
     def _run_sweep_repeat(
         self,
         param_resolver: study.ParamResolver,
         repetitions: int) -> Dict[str, List[np.ndarray]]:
+
+        if not self._intermediate:
+            raise Exception(f'KnowledgeCompilationSimulator not properly configured for intermediate state simulation.')
+
         measurements = {}  # type: Dict[str, List[np.ndarray]]
         for _ in range(repetitions):
             all_step_results = self._base_iterator(
@@ -517,6 +540,9 @@ potential ( {target_posterior} | '''
             if hasattr(self,'_simulate_sweep_flag') or hasattr(self,'_repetitions'):
                 for last_moment_index, moment in enumerate(self._circuit, start=1):
                     pass
+            else:
+                if not self._intermediate:
+                    raise Exception(f'KnowledgeCompilationSimulator not properly configured for intermediate state simulation.')
 
             for moment_index, moment in enumerate(self._circuit, start=1):
 
@@ -524,7 +550,7 @@ potential ( {target_posterior} | '''
                     pass
                 else:
 
-                    java_start = time.time()
+                    lmap_start = time.time()
 
                     csv_basename = f'{hash_csv}_{initial_state:04d}_{moment_index:04d}'
                     self._subprocess.stdin.write(f'cc$B${csv_basename}\n'.encode())
@@ -532,17 +558,24 @@ potential ( {target_posterior} | '''
 
                     with open('circuit.lmap', 'r') as lmap_file:
                         for line in lmap_file:
-                            int_strings = self._int_re_compile.findall(line)
-                            for int_string in int_strings:
-                                if int(int_string) in param_dict:
-                                    line = re.sub(int_string, param_dict[int(int_string)], line)
-                            node_string = self._node_re_compile.findall(line)
-                            if node_string and int(node_string[0])>moment_index:
-                                line = re.sub(r'\+', 'I', line)
+
+                            match = self._int_re_compile.match(line)
+                            if match and int(match.group(1)) in param_dict:
+                                line = re.sub(match.group(1), param_dict[int(match.group(1))], line)
+
+                            if self._intermediate:
+                                match = self._node_re_compile.match(line)
+                                if match and int(match.group(2))>moment_index:
+                                    line = re.sub(r'\+', 'I', line)
+
                             self._subprocess.stdin.write(line.encode())
 
                     measurements = collections.defaultdict(
                             list)  # type: Dict[str, List[bool]]
+
+                    print("lmap time = ")
+                    print(time.time() - lmap_start)
+                    java_start = time.time()
 
                     csv_name = f'{csv_basename}.csv'
                     while not os.path.exists(csv_name):
