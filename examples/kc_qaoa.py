@@ -106,13 +106,13 @@ def main(repetitions=256):
         # sum_of_cut_values = 0
         # nonlocal largest_cut_found
         # nonlocal largest_cut_value_found
-        histogram = defaultdict(int)
+        kc_histogram = defaultdict(int)
         for bitstring in bitstrings:
             # print (bitstring)
             integer = 0
             for pos, bit in enumerate(bitstring):
                 integer += bit<<pos
-            histogram[integer] += 1
+            kc_histogram[integer] += 1
             # value = cut_value(bitstring, graph)
             # sum_of_cut_values += value
             # if value > largest_cut_value_found:
@@ -136,26 +136,24 @@ def main(repetitions=256):
         sum_of_cut_values = 0
         nonlocal largest_cut_found
         nonlocal largest_cut_value_found
-        histogram = defaultdict(int)
+        sp_histogram = defaultdict(int)
         for bitstring in bitstrings:
             integer = 0
             for pos, bit in enumerate(bitstring):
                 integer += bit<<pos
-            # if integer not in histogram:
-            #     histogram[integer] = 1
-            # else:
-            histogram[integer] += 1
+            sp_histogram[integer] += 1
             value = cut_value(bitstring, graph)
             sum_of_cut_values += value
             if value > largest_cut_value_found:
                 largest_cut_value_found = value
                 largest_cut_found = bitstring
         mean = sum_of_cut_values / repetitions
+        # for bitstring in range(1<<n):
+        #     print ('bitstring='+str(bitstring)+' kc_samples='+str(kc_histogram[bitstring])+' sp_samples='+str(sp_histogram[bitstring]))
         # for index, amplitude in enumerate(sp_sim_result._final_simulator_state.state_vector):
         #     bitstring = format(index,'b').zfill(n)
         #     value = cut_value(bitstring, graph)
         #     probability = abs(amplitude) * abs(amplitude)
-        #     # print ('index='+str(index)+' samples='+str(histogram[index])+' probability='+str(probability))
         #     mean += value * probability
         #     if value > largest_cut_value_found:
         #         largest_cut_value_found = value
