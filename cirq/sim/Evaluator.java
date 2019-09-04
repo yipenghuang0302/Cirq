@@ -31,6 +31,8 @@ public class Evaluator {
   static Evidence evidence;
   static long evidenceDuration;
   static long evaluationDuration;
+  static long amplitudeDuration;
+  static long derivativesDuration;
   static BufferedWriter csv;
 
   public static void main(String[] args) throws Exception {
@@ -69,28 +71,31 @@ public class Evaluator {
         evidence = new Evidence(g);
         evidenceDuration = 0L;
         evaluationDuration = 0L;
+        amplitudeDuration = 0L;
+        derivativesDuration = 0L;
         csv = new BufferedWriter(new FileWriter(g.basename+".buf"));
         // csv.write("outputQubitString,amplitude,evidenceDuration,evaluationDuration");
         // csv.newLine();
 
         if ( g.repetitions!=0 ) {
-          long markov = ThreadLocalRandom.current().nextLong( 1L<<qubitCount );
-          for ( int iter=0; iter<64; iter++ ) { // warmup
-            // System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
-            // System.out.println("markov = " + markov);
-            Complex markovAmplitude = findAmplitude(markov, false);
-            // System.out.println("probability = " + markovAmplitude.abs() * markovAmplitude.abs());
-            markov = findDerivatives(markov);
-            // System.out.println("findDerivatives = " + markov);
+          long outputQubitString = ThreadLocalRandom.current().nextLong( 1L<<qubitCount );
+          for ( int iter=0; iter<16; iter++ ) { // warmup
+            Complex markovAmplitude = findAmplitude(outputQubitString, false);
+            outputQubitString = findDerivatives(outputQubitString);
           }
           for ( int iter=0; iter<g.repetitions; iter++ ) {
-            // System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
-            // System.out.println("markov = " + markov);
-            Complex markovAmplitude = findAmplitude(markov, true);
-            // System.out.println("probability = " + markovAmplitude.abs() * markovAmplitude.abs());
-            markov = findDerivatives(markov);
-            // System.out.println("findDerivatives = " + markov);
+            long amplitudeStart = System.nanoTime();
+            Complex markovAmplitude = findAmplitude(outputQubitString, true);
+            amplitudeDuration += System.nanoTime()-amplitudeStart;
+
+            long derivativesStart = System.nanoTime();
+            outputQubitString = findDerivatives(outputQubitString);
+            derivativesDuration += System.nanoTime()-derivativesStart;
           }
+          // System.out.println( String.format("   evidence time=%16d",evidenceDuration) );
+          // System.out.println( String.format(" evaluation time=%16d",evaluationDuration) );
+          System.out.println( String.format("  amplitude time=%16d",amplitudeDuration) );
+          System.out.println( String.format("derivatives time=%16d",derivativesDuration) );
         } else if (!g.bitstrings.isEmpty()) {
           for (int outputQubitString: g.bitstrings) {
             Complex amplitude = findAmplitude(outputQubitString, true);
@@ -116,33 +121,36 @@ public class Evaluator {
     }
   }
 
+  static long prevQubitString = Long.MAX_VALUE;
+  static Complex amplitude;
   private static Complex findAmplitude (
     long outputQubitString,
     boolean print
   ) throws Exception {
 
-    long evidenceStart = System.nanoTime();
+    // long evidenceStart = System.nanoTime();
     for (int qubit=0; qubit<qubitCount; qubit++) {
       int varForQubit = qubitFinalToVar[qubit];
       // to adhere to Cirq's endian convention:
       evidence.varCommit(varForQubit, ((int)(outputQubitString>>(qubitCount-qubit-1)))&1);
     }
-    evidenceDuration += System.nanoTime() - evidenceStart;  //divide by 1000000 to get milliseconds.
+    // evidenceDuration += System.nanoTime() - evidenceStart;  //divide by 1000000 to get milliseconds.
 
-    // Perform online inference in the context of the evidence set by
-    // invoking OnlineEngine.evaluate().  Doing so will compute probability of
-    // evidence.  Inference runs in time that is linear in the size of the
-    // arithmetic circuit.
+    // long evaluationStart = System.nanoTime();
+    if (outputQubitString!=prevQubitString) {
+      // Perform online inference in the context of the evidence set by
+      // invoking OnlineEngine.evaluate().  Doing so will compute probability of
+      // evidence.  Inference runs in time that is linear in the size of the
+      // arithmetic circuit.
+      g.evaluate(evidence);
 
-    long evaluationStart = System.nanoTime();
-    g.evaluate(evidence);
-    evaluationDuration += System.nanoTime() - evaluationStart;  //divide by 1000000 to get milliseconds.
-
-    // Now retrieve the result of inference.  The following method invocation
-    // performs no inference, simply looking up the requested value that was
-    // computed by OnlineEngine.evaluate().
-
-    Complex amplitude = g.evaluationResults();
+      // Now retrieve the result of inference.  The following method invocation
+      // performs no inference, simply looking up the requested value that was
+      // computed by OnlineEngine.evaluate().
+      amplitude = g.evaluationResults();
+    }
+    prevQubitString = outputQubitString;
+    // evaluationDuration += System.nanoTime() - evaluationStart;  //divide by 1000000 to get milliseconds.
 
     // Finally, write the results to out file.
     if (print) {
@@ -166,8 +174,9 @@ public class Evaluator {
     // This time, also differentiate.  Answers to many additional queries then
     // become available.  Inference time will still be linear in the size of the
     // arithmetic circuit, but the constant factor will be larger.
-
-    g.differentiate();
+    if (!g.differentiateResultsAvailable()) {
+      g.differentiate();
+    }
 
     // Once again retrieve results without performing inference.  We get
     // probability of evidence, derivatives, marginals, and posterior marginals
@@ -188,8 +197,18 @@ public class Evaluator {
     // System.out.println("randomQubit = " + randomQubit);
     int varForQubit = qubitFinalToVar[randomQubit];
 
+    // evidence.varCommit(varForQubit, 0);
+    // g.evaluate(evidence);
+    // Complex amplitude_0 = g.evaluationResults();
     double partial_0 = g.varPartials(varForQubit)[0].abs() * g.varPartials(varForQubit)[0].abs();
+    // double partial_0 = amplitude_0.abs() * amplitude_0.abs();
+
+    // evidence.varCommit(varForQubit, 1);
+    // g.evaluate(evidence);
+    // Complex amplitude_1 = g.evaluationResults();
     double partial_1 = g.varPartials(varForQubit)[1].abs() * g.varPartials(varForQubit)[1].abs();
+    // double partial_1 = amplitude_1.abs() * amplitude_1.abs();
+
     double probability = partial_1/(partial_0+partial_1);
     // System.out.println("probability = " + probability);
     if (Double.isNaN(probability)) {
@@ -197,10 +216,8 @@ public class Evaluator {
       // throw new Exception("Gibbs sampling transition probability is NaN.");
     } else {
       if ( ThreadLocalRandom.current().nextDouble() <= probability ) {
-          // outputQubitString |=  (1L << randomQubit);
           outputQubitString |=  (1L << (qubitCount-randomQubit-1));
       } else {
-          // outputQubitString &= ~(1L << randomQubit);
           outputQubitString &= ~(1L << (qubitCount-randomQubit-1));
       }
     }
