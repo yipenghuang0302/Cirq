@@ -214,7 +214,7 @@ potential ( {target_posterior} | '''
         if not self._intermediate: # messes up moment steps, moment step samping
             optimizers.ExpandComposite().optimize_circuit(circuit)
             # optimizers.ConvertToCzAndSingleGates().optimize_circuit(circuit) # cannot work with params
-            optimizers.MergeInteractions().optimize_circuit(circuit)
+            # optimizers.MergeInteractions().optimize_circuit(circuit)
             optimizers.MergeSingleQubitGates().optimize_circuit(circuit)
             optimizers.DropEmptyMoments().optimize_circuit(circuit)
             optimizers.EjectPhasedPaulis().optimize_circuit(circuit)
@@ -310,9 +310,12 @@ potential ( {target_posterior} | '''
 
         # Bayesian network to conjunctive normal form
         # TODO: autoinstall this
-        stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -b -i circuit.net -w -s')
-        # -e: Equal probabilities are encoded is incompatible with dtbnorders
-        # -e and -b used together causes moment steps simulation to fail
+        if not self._intermediate:
+            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -i circuit.net -w -s')
+            # -e: Equal probabilities are encoded is incompatible with dtbnorders
+        else:
+            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -b -i circuit.net -w -s')
+            # -e and -b used together causes moment steps simulation to fail
         print (stdout)
 
         self._node_re_compile = re.compile(r'cc\$I\$(\d+)\$1.0\$\+\$n(\d+)q(\d+)') # are negative literals and opt bool valid?
@@ -340,7 +343,7 @@ potential ( {target_posterior} | '''
         try:
             # Conjunctive normal form to arithmetic circuit
             bestFileSize = sys.maxsize
-            for _ in range(1):
+            for _ in range(2):
                 stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -simplify_s -in circuit.cnf')
                 if not self._intermediate:
                     stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -exist variables.file -reduce -in circuit.cnf_simplified')
@@ -516,7 +519,7 @@ potential ( {target_posterior} | '''
 
         else:
 
-            prep_start = time.time()
+            # prep_start = time.time()
 
             param_dict = {}
             for target_qubit, initial_value in zip (
@@ -534,8 +537,8 @@ potential ( {target_posterior} | '''
             for hash_key, symbols in self._hash_to_symbols.items():
                 param_dict[hash_key] = self._to_java_complex(protocols.resolve_parameters(symbols, param_resolver))
 
-            print("prep time = ")
-            print(time.time() - prep_start)
+            # print("prep time = ")
+            # print(time.time() - prep_start)
 
             if hasattr(self,'_simulate_sweep_flag') or hasattr(self,'_repetitions'):
                 for last_moment_index, moment in enumerate(self._circuit, start=1):
@@ -550,7 +553,7 @@ potential ( {target_posterior} | '''
                     pass
                 else:
 
-                    lmap_start = time.time()
+                    # lmap_start = time.time()
 
                     csv_basename = f'{hash_csv}_{initial_state:04d}_{moment_index:04d}'
                     self._subprocess.stdin.write(f'cc$B${csv_basename}\n'.encode())
@@ -573,17 +576,17 @@ potential ( {target_posterior} | '''
                     measurements = collections.defaultdict(
                             list)  # type: Dict[str, List[bool]]
 
-                    print("lmap time = ")
-                    print(time.time() - lmap_start)
-                    java_start = time.time()
+                    # print("lmap time = ")
+                    # print(time.time() - lmap_start)
+                    # java_start = time.time()
 
                     csv_name = f'{csv_basename}.csv'
                     while not os.path.exists(csv_name):
                         self._subprocess.stdin.write(b'\n') # keep pushing the BufferedReader
 
-                    print("java time = ")
-                    print(time.time() - java_start)
-                    post_start = time.time()
+                    # print("java time = ")
+                    # print(time.time() - java_start)
+                    # post_start = time.time()
 
                     state_vector = []
                     outputQubitString = 0
@@ -642,8 +645,8 @@ potential ( {target_posterior} | '''
                                     self._simulate_measurement(op, np.reshape(state_vector, (2,) * self._num_qubits), indices,
                                                                measurements, self._num_qubits)
 
-                    print("post time = ")
-                    print(time.time() - post_start)
+                    # print("post time = ")
+                    # print(time.time() - post_start)
 
                     yield sparse_simulator.SparseSimulatorStep(
                         state_vector=state_vector,
