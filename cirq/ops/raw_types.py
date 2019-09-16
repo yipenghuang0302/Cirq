@@ -14,7 +14,8 @@
 
 """Basic types defining qubits, gates, and operations."""
 
-from typing import Any, Callable, Sequence, Tuple, TYPE_CHECKING, Union
+from typing import (Any, Callable, Collection, Optional, Sequence, Tuple,
+                    TYPE_CHECKING, Union)
 
 import abc
 import functools
@@ -148,7 +149,7 @@ class _QubitAsQid(Qid):
         return '{!s} (d={})'.format(self.qubit, self.dimension)
 
     def _json_dict_(self):
-        return protocols.to_json_dict(self, ['qubit', 'dimension'])
+        return protocols.obj_to_dict_helper(self, ['qubit', 'dimension'])
 
 
 class Gate(metaclass=value.ABCMetaImplementAnyOneOf):
@@ -261,7 +262,10 @@ class Gate(metaclass=value.ABCMetaImplementAnyOneOf):
     def __call__(self, *args, **kwargs):
         return self.on(*args, **kwargs)
 
-    def controlled_by(self, *control_qubits: Qid) -> 'Gate':
+    def controlled_by(self,
+                      *control_qubits: Qid,
+                      control_values: Optional[Sequence[
+                          Union[int, Collection[int]]]] = None) -> 'Gate':
         """Returns a controlled version of this gate.
 
         Args:
@@ -271,7 +275,8 @@ class Gate(metaclass=value.ABCMetaImplementAnyOneOf):
         from cirq.ops import ControlledGate
         if len(control_qubits) == 0:
             return self
-        return ControlledGate(self, control_qubits, len(control_qubits))
+        return ControlledGate(self, control_qubits, len(control_qubits),
+                              control_values)
 
     # num_qubits, _num_qubits_, and _qid_shape_ are implemented with alternative
     # to keep backwards compatibility with versions of cirq where num_qubits
@@ -315,7 +320,7 @@ class Gate(metaclass=value.ABCMetaImplementAnyOneOf):
         """
 
     def _json_dict_(self):
-        return protocols.to_json_dict(self, attribute_names=[])
+        return protocols.obj_to_dict_helper(self, attribute_names=[])
 
 
 class Operation(metaclass=abc.ABCMeta):
@@ -337,6 +342,9 @@ class Operation(metaclass=abc.ABCMeta):
         """
         return len(self.qubits)
 
+    def _qid_shape_(self) -> Tuple[int, ...]:
+        return protocols.qid_shape(self.qubits)
+
     @abc.abstractmethod
     def with_qubits(self, *new_qubits: Qid) -> 'Operation':
         pass
@@ -354,7 +362,10 @@ class Operation(metaclass=abc.ABCMeta):
         """
         return self.with_qubits(*(func(q) for q in self.qubits))
 
-    def controlled_by(self, *control_qubits: Qid) -> 'Operation':
+    def controlled_by(self,
+                      *control_qubits: Qid,
+                      control_values: Optional[Sequence[
+                          Union[int, Collection[int]]]] = None) -> 'Operation':
         """Returns a controlled version of this operation.
 
         Args:
@@ -364,7 +375,7 @@ class Operation(metaclass=abc.ABCMeta):
         from cirq.ops import ControlledOperation
         if len(control_qubits) == 0:
             return self
-        return ControlledOperation(control_qubits, self)
+        return ControlledOperation(control_qubits, self, control_values)
 
     def validate_args(self, qubits: Sequence[Qid]):
         """Raises an exception if the `qubits` don't match this operation's qid
