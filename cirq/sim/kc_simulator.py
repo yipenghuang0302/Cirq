@@ -163,15 +163,19 @@ potential ( {target_posterior} | '''
         return out_string
 
     # If CPT element is complex number, writes CPP style complex value for bayes-to-cnf
-    # If CPT element is a sympy object, writes a 28-bit integer hash so we can find it again at inference time
+    # If CPT element is a sympy object, writes a 20-bit integer hash so we can find it again at inference time
     def _to_cpp_complex_hash ( self, complex_symbols ):
         if complex_symbols==0:
             return '0'
+        if complex_symbols==1:
+            return '1'
         elif isinstance ( complex_symbols, numbers.Number ) :
             return(f'{complex_symbols.real:.8f},{complex_symbols.imag:.8f}')
+        # elif isinstance ( complex_symbols, numbers.Number ) and complex_symbols.imag==0:
+        #     return(f'{complex_symbols.real:.8f}')
         else:
-            self._hash_to_symbols[hash(complex_symbols)%(1<<28)] = complex_symbols
-            return(hash(complex_symbols)%(1<<28))
+            self._hash_to_symbols[hash(complex_symbols)%((1<<20)-65535)] = complex_symbols
+            return(hash(complex_symbols)%((1<<20)-65535))
 
     def _cpt_to_cpp_complex_hash ( self, cpt ):
         if hasattr(cpt,'__len__'):
@@ -256,7 +260,7 @@ potential ( {target_posterior} | '''
             else:
                 qi0_sym = 'i0' + 'q'+str(target_qubit).zfill(4)
                 qi1_sym = 'i1' + 'q'+str(target_qubit).zfill(4)
-                node_string += '({} {})'.format ( hash(qi0_sym)%(1<<28), hash(qi1_sym)%(1<<28) )
+                node_string += '({} {})'.format ( hash(qi0_sym)%((1<<20)-65535), hash(qi1_sym)%((1<<20)-65535) )
 
             node_string += self.net_postlude
 
@@ -314,16 +318,19 @@ potential ( {target_posterior} | '''
         # TODO: autoinstall this
         if not self._intermediate:
             stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -i circuit.net -w -s')
+            # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e: Equal probabilities are encoded is incompatible with dtbnorders
         else:
-            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -b -i circuit.net -w -s')
+            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -e -d -a -i circuit.net -w -s')
+            # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e and -b used together causes moment steps simulation to fail
         print (stdout)
 
         self._node_re_compile = re.compile(r'cc\$I\$(\d+)\$1.0\$\+\$n(\d+)q(\d+)') # are negative literals and opt bool valid?
         self._int_re_compile = re.compile(r'cc\$C\$\d+\$(\d+)')
         existentially_quantified_variables = []
-        with open('circuit.cnf', 'r') as cnf_file:
+        with open('circuit.net.cnf', 'r') as cnf_file:
+        # with open('circuit.net.lmap', 'r') as cnf_file:
             with open('circuit.lmap', 'w') as lmap_file:
                 for line in cnf_file:
                     if line.startswith('cc'):
@@ -346,26 +353,27 @@ potential ( {target_posterior} | '''
             # Conjunctive normal form to arithmetic circuit
             bestFileSize = sys.maxsize
             for _ in range(2):
-                stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -simplify_s -in circuit.cnf')
+                stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -simplify_s -in circuit.net.cnf')
                 if not self._intermediate:
-                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -exist variables.file -reduce -in circuit.cnf_simplified')
+                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -exist variables.file -reduce -in circuit.net.cnf_simplified -suppress_ane')
+                    # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -exist variables.file -reduce -in circuit.net.cnf_simplified -minimize -suppress_ane -determined circuit.net.pmap')
                 else:
-                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -reduce -in circuit.cnf_simplified')
-                # stdout = os.system('/n/fs/qdb/qACE/miniC2D-1.0.0/bin/linux/miniC2D -c circuit.cnf_simplified')
+                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -reduce -in circuit.net.cnf_simplified -suppress_ane')
+                # stdout = os.system('/n/fs/qdb/qACE/miniC2D-1.0.0/bin/linux/miniC2D -c circuit.net.cnf_simplified')
                 print (stdout)
-                currFileSize = os.path.getsize('circuit.cnf_simplified.nnf')
+                currFileSize = os.path.getsize('circuit.net.cnf_simplified.nnf')
                 if currFileSize<bestFileSize:
                     bestFileSize = currFileSize
-                    os.rename('circuit.cnf_simplified.nnf','best.cnf_simplified.nnf')
-            os.rename('best.cnf_simplified.nnf','circuit.cnf_simplified.nnf')
+                    os.rename('circuit.net.cnf_simplified.nnf','best.net.cnf_simplified.nnf')
+            os.rename('best.net.cnf_simplified.nnf','circuit.net.cnf_simplified.nnf')
 
             # Build the evaluator for the arithmetic circuit
             stdout = os.system('mkdir evaluator')
-            stdout = os.system('javac -d evaluator -cp /n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar -Xlint:unchecked /n/fs/qdb/Cirq/cirq/sim/Evaluator.java /n/fs/qdb/qACE/org/apache/commons/math3/complex/ComplexFormat.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngine.java /n/fs/qdb/qACE/aceEvalComplexSrc/Calculator.java /n/fs/qdb/qACE/aceEvalComplexSrc/Evidence.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngineSop.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorNormal.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorLogE.java /n/fs/qdb/qACE/aceEvalComplexSrc/UnderflowException.java')
+            stdout = os.system('javac -d evaluator -cp /n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar -Xlint:unchecked /n/fs/qdb/Google/Cirq/cirq/sim/Evaluator.java /n/fs/qdb/qACE/org/apache/commons/math3/complex/ComplexFormat.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngine.java /n/fs/qdb/qACE/aceEvalComplexSrc/Calculator.java /n/fs/qdb/qACE/aceEvalComplexSrc/Evidence.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngineSop.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorNormal.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorLogE.java /n/fs/qdb/qACE/aceEvalComplexSrc/UnderflowException.java')
             print (stdout)
 
             # Launch the evaluator in a subprocess
-            self._subprocess = subprocess.Popen(["java", "-cp", "evaluator:/n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar", "edu.ucla.belief.ace.Evaluator", "circuit.lmap", "circuit.cnf_simplified.nnf", str(self._num_qubits)], stdin=subprocess.PIPE)
+            self._subprocess = subprocess.Popen(["java", "-cp", "evaluator:/n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar", "edu.ucla.belief.ace.Evaluator", "circuit.lmap", "circuit.net.cnf_simplified.nnf", str(self._num_qubits)], stdin=subprocess.PIPE)
 
         except:
             pass
@@ -533,9 +541,9 @@ potential ( {target_posterior} | '''
                 [bool(initial_state & (1<<n)) for n in reversed(range(self._num_qubits))]
                 ):
                 qi0_sym = 'i0'+'q'+str(target_qubit).zfill(4)
-                param_dict[ hash(qi0_sym)%(1<<28) ] = '0' if initial_value else '1'
+                param_dict[ hash(qi0_sym)%((1<<20)-65535) ] = '0' if initial_value else '1'
                 qi1_sym = 'i1'+'q'+str(target_qubit).zfill(4)
-                param_dict[ hash(qi1_sym)%(1<<28) ] = '1' if initial_value else '0'
+                param_dict[ hash(qi1_sym)%((1<<20)-65535) ] = '1' if initial_value else '0'
 
             param_resolver = param_resolver or study.ParamResolver({})
             hash_csv = int(hash((self._subprocess, param_resolver)))
