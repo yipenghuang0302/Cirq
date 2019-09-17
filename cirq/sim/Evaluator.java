@@ -79,7 +79,7 @@ public class Evaluator {
 
         if ( g.repetitions!=0 ) {
           long outputQubitString = ThreadLocalRandom.current().nextLong( 1L<<qubitCount );
-          for ( int iter=0; iter<16; iter++ ) { // warmup
+          for ( int iter=0; iter<32; iter++ ) { // warmup
             Complex markovAmplitude = findAmplitude(outputQubitString, false);
             outputQubitString = findDerivatives(outputQubitString);
           }

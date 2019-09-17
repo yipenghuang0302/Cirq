@@ -21,7 +21,7 @@ from typing import Any, Dict, Iterator, List, Union
 import numbers, cmath, sympy
 import numpy as np
 
-from cirq import circuits, ops, protocols, schedules, study, optimizers
+from cirq import circuits, ops, protocols, schedules, study, optimizers, value
 from cirq.sim import simulator, wave_function, wave_function_simulator, sparse_simulator
 
 import os, subprocess, re, csv, sys, time
@@ -211,16 +211,17 @@ potential ( {target_posterior} | '''
 
         circuit = (program if isinstance(program, circuits.Circuit) else program.to_circuit())
 
-        if not self._intermediate: # messes up moment steps, moment step samping
-            optimizers.ExpandComposite().optimize_circuit(circuit)
-            # optimizers.ConvertToCzAndSingleGates().optimize_circuit(circuit) # cannot work with params
-            # optimizers.MergeInteractions().optimize_circuit(circuit)
-            optimizers.MergeSingleQubitGates().optimize_circuit(circuit)
-            optimizers.DropEmptyMoments().optimize_circuit(circuit)
-            optimizers.EjectPhasedPaulis().optimize_circuit(circuit)
-            pass
-        optimizers.EjectZ().optimize_circuit(circuit)
-        # optimizers.DropNegligible().optimize_circuit(circuit)
+        for _ in range(2):
+            if not self._intermediate: # messes up moment steps, moment step samping
+                optimizers.ExpandComposite().optimize_circuit(circuit)
+                # optimizers.ConvertToCzAndSingleGates().optimize_circuit(circuit) # cannot work with params
+                # optimizers.MergeInteractions().optimize_circuit(circuit)
+                optimizers.MergeSingleQubitGates().optimize_circuit(circuit)
+                optimizers.DropEmptyMoments().optimize_circuit(circuit)
+                optimizers.EjectPhasedPaulis().optimize_circuit(circuit)
+                pass
+            optimizers.EjectZ().optimize_circuit(circuit)
+            # optimizers.DropNegligible().optimize_circuit(circuit)
 
         self._circuit = circuit
         self._qubits = ops.QubitOrder.as_qubit_order(qubit_order).order_for(circuit.all_qubits())
@@ -266,7 +267,8 @@ potential ( {target_posterior} | '''
             for op in moment:
 
                 if isinstance(op,(ops.PauliString, ops.PauliStringPhasor)) or \
-                not isinstance(op,(ops.PauliStringExpectation, ops.ApproxPauliStringExpectation)) and not isinstance(op.gate,ops.MeasurementGate):
+                not isinstance(op,(ops.ApproxPauliStringExpectation)) and not isinstance(op.gate,ops.MeasurementGate):
+                # ops.PauliStringExpectation,
 
                     if isinstance(op,(ops.PauliString,ops.PauliStringPhasor)):
                         gate = None
@@ -435,8 +437,11 @@ potential ( {target_posterior} | '''
             qubit_order: ops.QubitOrderOrList = ops.QubitOrder.DEFAULT,
     ) -> List[List[complex]]:
 
+        qid_shape = self._circuit.qid_shape(qubit_order=qubit_order)
         self._amplitude_indices = [
-            wave_function_simulator._bitstring_to_integer(bitstring) for bitstring in bitstrings
+            value.big_endian_digits_to_int(bitstring, base=qid_shape)
+            # wave_function_simulator._bitstring_to_integer(bitstring)
+            for bitstring in bitstrings
         ]
 
         for amplitude_index in self._amplitude_indices:
@@ -512,7 +517,7 @@ potential ( {target_posterior} | '''
 
         if len(self._circuit) == 0:
             yield sparse_simulator.SparseSimulatorStep(
-                wave_function.to_valid_state_vector(initial_state,self._num_qubits,self._dtype),
+                wave_function.to_valid_state_vector(initial_state,self._num_qubits,dtype=self._dtype),
                 {},
                 self._qubit_map,
                 self._dtype)
@@ -664,8 +669,7 @@ potential ( {target_posterior} | '''
             invert_mask = meas.full_invert_mask()
             # Measure updates inline.
             bits, _ = wave_function.measure_state_vector(data,
-                                                         indices,
-                                                         data)
+                                                         indices)
             corrected = [bit ^ mask for bit, mask in zip(bits, invert_mask)]
             key = protocols.measurement_key(meas)
             measurements[key].extend(corrected)
