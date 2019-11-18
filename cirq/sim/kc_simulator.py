@@ -353,12 +353,12 @@ potential ( {target_posterior} | '''
             # Conjunctive normal form to arithmetic circuit
             bestFileSize = sys.maxsize
             for _ in range(2):
-                stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -simplify_s -in circuit.net.cnf')
+                stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -simplify_s -in circuit.net.cnf -visualize')
                 if not self._intermediate:
-                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -exist variables.file -reduce -in circuit.net.cnf_simplified -suppress_ane')
+                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -exist variables.file -reduce -in circuit.net.cnf_simplified -suppress_ane -visualize')
                     # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -exist variables.file -reduce -in circuit.net.cnf_simplified -minimize -suppress_ane -determined circuit.net.pmap')
                 else:
-                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -reduce -in circuit.net.cnf_simplified -suppress_ane')
+                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -reduce -in circuit.net.cnf_simplified -suppress_ane -visualize')
                 # stdout = os.system('/n/fs/qdb/qACE/miniC2D-1.0.0/bin/linux/miniC2D -c circuit.net.cnf_simplified')
                 print (stdout)
                 currFileSize = os.path.getsize('circuit.net.cnf_simplified.nnf')
