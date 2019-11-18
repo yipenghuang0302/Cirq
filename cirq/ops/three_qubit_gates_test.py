@@ -152,6 +152,14 @@ def test_gate_equality():
     eq.add_equality_group(cirq.CCZPowGate(), cirq.CCZPowGate())
 
 
+def test_identity_multiplication():
+    a, b, c = cirq.LineQubit.range(3)
+    assert cirq.CCX(a, b, c) * cirq.I(a) == cirq.CCX(a, b, c)
+    assert cirq.CCX(a, b, c) * cirq.I(b) == cirq.CCX(a, b, c)
+    assert cirq.CCX(a, b, c)**0.5 * cirq.I(c) == cirq.CCX(a, b, c)**0.5
+    assert cirq.I(c) * cirq.CCZ(a, b, c)**0.5 == cirq.CCZ(a, b, c)**0.5
+
+
 @pytest.mark.parametrize('op,max_two_cost', [
     (cirq.CCZ(*cirq.LineQubit.range(3)), 8),
     (cirq.CCX(*cirq.LineQubit.range(3)), 8),
@@ -183,18 +191,18 @@ def test_decomposition_respects_locality(gate):
     c = cirq.GridQubit(0, 1)
 
     for x, y, z in itertools.permutations([a, b, c]):
-        circuit = cirq.Circuit.from_ops(gate(x, y, z))
+        circuit = cirq.Circuit(gate(x, y, z))
         cirq.google.ConvertToXmonGates().optimize_circuit(circuit)
         cirq.google.Foxtail.validate_circuit(circuit)
 
 
 def test_diagram():
     a, b, c, d = cirq.LineQubit.range(4)
-    circuit = cirq.Circuit.from_ops(cirq.TOFFOLI(a, b, c),
-                                    cirq.TOFFOLI(a, b, c)**0.5,
-                                    cirq.CCX(a, c, b), cirq.CCZ(a, d, b),
-                                    cirq.CCZ(a, d, b)**0.5, cirq.CSWAP(a, c, d),
-                                    cirq.FREDKIN(a, b, c))
+    circuit = cirq.Circuit(cirq.TOFFOLI(a, b, c),
+                           cirq.TOFFOLI(a, b, c)**0.5, cirq.CCX(a, c, b),
+                           cirq.CCZ(a, d, b),
+                           cirq.CCZ(a, d, b)**0.5, cirq.CSWAP(a, c, d),
+                           cirq.FREDKIN(a, b, c))
     cirq.testing.assert_has_diagram(
         circuit, """
 0: ───@───@───────@───@───@───────@───@───
@@ -217,7 +225,7 @@ def test_diagram():
 """,
                                     use_unicode_characters=False)
 
-    diagonal_circuit = cirq.Circuit.from_ops(
+    diagonal_circuit = cirq.Circuit(
         cirq.ThreeQubitDiagonalGate([2, 3, 5, 7, 11, 13, 17, 19])(a, b, c))
     cirq.testing.assert_has_diagram(
         diagonal_circuit, """

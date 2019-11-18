@@ -227,6 +227,13 @@ def test_bool():
     assert Moment([cirq.X(a)])
 
 
+def test_repr():
+    a = cirq.NamedQubit('a')
+    b = cirq.NamedQubit('b')
+    original = Moment([cirq.CZ(a, b)])
+    cirq.testing.assert_equivalent_repr(original)
+
+
 def test_json_dict():
     a = cirq.NamedQubit('a')
     b = cirq.NamedQubit('b')
@@ -235,3 +242,22 @@ def test_json_dict():
         'cirq_type': 'Moment',
         'operations': (cirq.CZ(a, b),)
     }
+
+
+def test_inverse():
+    a, b, c = cirq.LineQubit.range(3)
+    m = cirq.Moment([cirq.S(a), cirq.CNOT(b, c)])
+    assert m**1 is m
+    assert m**-1 == cirq.Moment([cirq.S(a)**-1, cirq.CNOT(b, c)])
+    assert m**0.5 == cirq.Moment([cirq.T(a), cirq.CNOT(b, c)**0.5])
+    assert cirq.inverse(m) == m**-1
+    assert cirq.inverse(cirq.inverse(m)) == m
+    assert cirq.inverse(cirq.Moment([cirq.measure(a)]), default=None) is None
+
+
+def test_immutable_moment():
+    with pytest.raises(AttributeError):
+        q1, q2 = cirq.LineQubit.range(2)
+        circuit = cirq.Circuit(cirq.X(q1))
+        moment = circuit.moments[0]
+        moment.operations += (cirq.Y(q2),)

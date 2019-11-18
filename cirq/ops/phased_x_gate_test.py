@@ -157,9 +157,9 @@ def test_eq():
 
 
 def test_str_repr():
-    assert str(cirq.PhasedXPowGate(phase_exponent=0.25)) == 'PhasedX(0.25)'
+    assert str(cirq.PhasedXPowGate(phase_exponent=0.25)) == 'PhX(0.25)'
     assert str(cirq.PhasedXPowGate(phase_exponent=0.25,
-                                   exponent=0.5)) == 'PhasedX(0.25)^0.5'
+                                   exponent=0.5)) == 'PhX(0.25)^0.5'
     assert repr(cirq.PhasedXPowGate(phase_exponent=0.25,
                                     exponent=4,
                                     global_shift=0.125) ==
@@ -202,7 +202,7 @@ def test_trace_bound():
 
 def test_diagram():
     q = cirq.NamedQubit('q')
-    c = cirq.Circuit.from_ops(
+    c = cirq.Circuit(
         cirq.PhasedXPowGate(phase_exponent=sympy.Symbol('a'),
                             exponent=sympy.Symbol('b')).on(q),
         cirq.PhasedXPowGate(phase_exponent=sympy.Symbol('a') * 2,
@@ -212,7 +212,7 @@ def test_diagram():
     )
     cirq.testing.assert_has_diagram(
         c, """
-q: ───PhasedX(a)^b───PhasedX(2*a)^(b + 1)───PhasedX(0.25)───PhasedX(1)───
+q: ───PhX(a)^b───PhX(2*a)^(b + 1)───PhX(0.25)───PhX(1)───
 """)
 
 

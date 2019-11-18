@@ -73,8 +73,9 @@ class TrialResult:
     """The results of multiple executions of a circuit with fixed parameters.
     Stored as a Pandas DataFrame that can be accessed through the "data"
     attribute. The repetition number is the row index and measurement keys
-    are the columns of the DataFrame. Each element is a Pandas Series of
-    measurement outcomes per bit for the measurement key in that repitition.
+    are the columns of the DataFrame. Each element is a big endian integer
+    representation of measurement outcomes for the measurement key in that
+    repitition.
 
     Attributes:
         params: A ParamResolver of settings used when sampling result.
@@ -108,7 +109,10 @@ class TrialResult:
                 converted_dict[key] = [
                     value.big_endian_bits_to_int(m_vals) for m_vals in val
                 ]
-            self._data = pd.DataFrame(converted_dict)
+            # Note that when a numpy array is produced from this data frame,
+            # Pandas will try to use np.int64 as dtype, but will upgrade to
+            # object if any value is too large to fit.
+            self._data = pd.DataFrame(converted_dict, dtype=np.int64)
         return self._data
 
     @staticmethod
@@ -141,7 +145,7 @@ class TrialResult:
             self,
             *,  # Forces keyword args.
             keys: Iterable[TMeasurementKey],
-            fold_func: Callable[[pd.Series], T] = _tuple_of_big_endian_int
+            fold_func: Callable[[Tuple], T] = _tuple_of_big_endian_int
     ) -> collections.Counter:
         """Counts the number of times combined measurement results occurred.
 
@@ -202,7 +206,7 @@ class TrialResult:
             self,
             *,  # Forces keyword args.
             key: TMeasurementKey,
-            fold_func: Callable[[pd.Series], T] = value.big_endian_bits_to_int
+            fold_func: Callable[[Tuple], T] = value.big_endian_bits_to_int
     ) -> collections.Counter:
         """Counts the number of times a measurement result occurred.
 
@@ -271,3 +275,22 @@ class TrialResult:
         if not isinstance(other, type(self)):
             return NotImplemented
         return self.data.equals(other.data) and self.params == other.params
+
+    def _measurement_shape(self):
+        return self.params, {
+            k: v.shape[1] for k, v in self.measurements.items()
+        }
+
+    def __add__(self, other: 'cirq.TrialResult') -> 'cirq.TrialResult':
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        if self._measurement_shape() != other._measurement_shape():
+            raise ValueError(
+                'TrialResults do not have the same parameters or do '
+                'not have the same measurement keys.')
+        all_measurements: Dict[str, np.ndarray] = {}
+        for key in other.measurements:
+            all_measurements[key] = np.append(self.measurements[key],
+                                              other.measurements[key],
+                                              axis=0)
+        return TrialResult(params=self.params, measurements=all_measurements)

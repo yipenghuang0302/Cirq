@@ -14,9 +14,6 @@
 
 """Types and methods for running studies (repeated trials)."""
 
-from cirq.study.compute_displays_result import (
-    ComputeDisplaysResult,)
-
 from cirq.study.flatten_expressions import (
     ExpressionMap,
     flatten,
@@ -40,7 +37,6 @@ from cirq.study.sweepable import (
 from cirq.study.sweeps import (
     Linspace,
     ListSweep,
-    Product,
     Points,
     Product,
     Sweep,

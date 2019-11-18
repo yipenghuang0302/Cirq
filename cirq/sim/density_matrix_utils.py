@@ -27,7 +27,8 @@ def to_valid_density_matrix(
         num_qubits: Optional[int] = None,
         *,  # Force keyword arguments
         qid_shape: Optional[Tuple[int, ...]] = None,
-        dtype: Type[np.number] = np.complex64) -> np.ndarray:
+        dtype: Type[np.number] = np.complex64,
+        atol: float = 1e-7) -> np.ndarray:
     """Verifies the density_matrix_rep is valid and converts it to ndarray form.
 
     This method is used to support passing a matrix, a vector (wave function),
@@ -45,6 +46,7 @@ def to_valid_density_matrix(
         dtype: The numpy dtype of the density matrix, will be used when creating
             the state for a computational basis state (int), or validated
             against if density_matrix_rep is a numpy array.
+        atol: Numerical tolerance for verifying density matrix properties.
 
     Returns:
         A numpy matrix corresponding to the density matrix on the given number
@@ -61,9 +63,10 @@ def to_valid_density_matrix(
                 'Density matrix was not square and of size 2 ** num_qubit, '
                 'instead was {}'.format(density_matrix_rep.shape))
         if not np.allclose(density_matrix_rep,
-                           np.transpose(np.conj(density_matrix_rep))):
+                           np.transpose(np.conj(density_matrix_rep)),
+                           atol=atol):
             raise ValueError('The density matrix is not hermitian.')
-        if not np.isclose(np.trace(density_matrix_rep), 1.0):
+        if not np.isclose(np.trace(density_matrix_rep), 1.0, atol=atol):
             raise ValueError(
                 'Density matrix did not have trace 1 but instead {}'.format(
                     np.trace(density_matrix_rep)))
@@ -71,7 +74,7 @@ def to_valid_density_matrix(
             raise ValueError(
                 'Density matrix had dtype {} but expected {}'.format(
                     density_matrix_rep.dtype, dtype))
-        if not np.all(np.linalg.eigvalsh(density_matrix_rep) > -1e-8):
+        if not np.all(np.linalg.eigvalsh(density_matrix_rep) > -atol):
             raise ValueError('The density matrix is not positive semidefinite.')
         return density_matrix_rep
 
@@ -87,7 +90,8 @@ def sample_density_matrix(
         indices: List[int],
         *,  # Force keyword arguments
         qid_shape: Optional[Tuple[int, ...]] = None,
-        repetitions: int = 1) -> np.ndarray:
+        repetitions: int = 1,
+        seed: value.RANDOM_STATE_LIKE = None) -> np.ndarray:
     """Samples repeatedly from measurements in the computational basis.
 
     Note that this does not modify the density_matrix.
@@ -104,6 +108,7 @@ def sample_density_matrix(
         qid_shape: The qid shape of the density matrix.  Specify this argument
             when using qudits.
         repetitions: The number of times to sample the density matrix.
+        seed: A seed for the pseudorandom number generator.
 
     Returns:
         Measurement results with True corresponding to the ``|1⟩`` state.
@@ -131,13 +136,15 @@ def sample_density_matrix(
     if repetitions == 0 or len(indices) == 0:
         return np.zeros(shape=(repetitions, len(indices)), dtype=np.int8)
 
+    prng = value.parse_random_state(seed)
+
     # Calculate the measurement probabilities.
     probs = _probs(density_matrix, indices, qid_shape)
 
     # We now have the probability vector, correctly ordered, so sample over
     # it. Note that we us ints here, since numpy's choice does not allow for
     # choosing from a list of tuples or list of lists.
-    result = np.random.choice(len(probs), size=repetitions, p=probs)
+    result = prng.choice(len(probs), size=repetitions, p=probs)
     # Convert to individual qudit measurements.
     return np.array([
         value.big_endian_int_to_digits(result[i], base=meas_shape)
@@ -149,7 +156,8 @@ def sample_density_matrix(
 def measure_density_matrix(density_matrix: np.ndarray,
                            indices: List[int],
                            qid_shape: Optional[Tuple[int, ...]] = None,
-                           out: np.ndarray = None
+                           out: np.ndarray = None,
+                           seed: value.RANDOM_STATE_LIKE = None
                           ) -> Tuple[List[int], np.ndarray]:
     """Performs a measurement of the density matrix in the computational basis.
 
@@ -174,6 +182,7 @@ def measure_density_matrix(density_matrix: np.ndarray,
             method. The shape and dtype of `out` will match that of
             `density_matrix` if `out` is None, otherwise it will match the
             shape and dtype of `out`.
+        seed: A seed for the pseudorandom number generator.
 
     Returns:
         A tuple of a list and an numpy array. The list is an array of booleans
@@ -203,12 +212,14 @@ def measure_density_matrix(density_matrix: np.ndarray,
         return ([], out)
         # Final else: if out is matrix then matrix will be modified in place.
 
+    prng = value.parse_random_state(seed)
+
     # Cache initial shape.
     initial_shape = density_matrix.shape
 
     # Calculate the measurement probabilities and then make the measurement.
     probs = _probs(density_matrix, indices, qid_shape)
-    result = np.random.choice(len(probs), p=probs)
+    result = prng.choice(len(probs), p=probs)
     measurement_bits = value.big_endian_int_to_digits(result, base=meas_shape)
 
     # Calculate the slice for the measurement result.
@@ -237,7 +248,7 @@ def measure_density_matrix(density_matrix: np.ndarray,
 
 
 def _probs(density_matrix: np.ndarray, indices: List[int],
-           qid_shape: Tuple[int, ...]) -> List[float]:
+           qid_shape: Tuple[int, ...]) -> np.ndarray:
     """Returns the probabilities for a measurement on the given indices."""
     # Only diagonal elements matter.
     all_probs = np.diagonal(
@@ -246,16 +257,24 @@ def _probs(density_matrix: np.ndarray, indices: List[int],
     tensor = np.reshape(all_probs, qid_shape)
 
     # Calculate the probabilities for measuring the particular results.
-    meas_shape = tuple(qid_shape[i] for i in indices)
-    probs = [
-        np.sum(
-            np.abs(tensor[linalg.slice_for_qubits_equal_to(
-                indices, big_endian_qureg_value=b, qid_shape=qid_shape)]))
-        for b in range(np.prod(meas_shape, dtype=int))
-    ]
+    if len(indices) == len(qid_shape):
+        # We're measuring every qudit, so no need for fancy indexing
+        probs = np.abs(tensor)
+        probs = np.transpose(probs, indices)
+        probs = np.reshape(probs, np.prod(probs.shape))
+    else:
+        # Fancy indexing required
+        meas_shape = tuple(qid_shape[i] for i in indices)
+        probs = np.abs([
+            tensor[linalg.slice_for_qubits_equal_to(indices,
+                                                    big_endian_qureg_value=b,
+                                                    qid_shape=qid_shape)]
+            for b in range(np.prod(meas_shape, dtype=int))
+        ])
+        probs = np.sum(probs, axis=tuple(range(1, len(probs.shape))))
 
     # To deal with rounding issues, ensure that the probabilities sum to 1.
-    probs /= np.sum(probs) # type: ignore
+    probs /= np.sum(probs)
     return probs
 
 
