@@ -16,7 +16,7 @@
 
 import collections
 
-from typing import Any, Dict, Iterator, List, Union
+from typing import Any, Dict, Iterator, List, Sequence, Union
 
 import numbers, cmath, sympy
 import numpy as np
@@ -200,7 +200,8 @@ potential ( {target_posterior} | '''
         qubit_order: ops.QubitOrderOrList = ops.QubitOrder.DEFAULT,
         initial_state: Any = None,
         intermediate: bool = False, # whether or not moment steps, intermediate measurement allowed.
-        dtype=np.complex64):
+        dtype=np.complex64,
+        seed: value.RANDOM_STATE_LIKE = None):
         """A sparse matrix simulator.
 
         Args:
@@ -211,6 +212,7 @@ potential ( {target_posterior} | '''
             raise ValueError(
                 'dtype must be a complex type but was {}'.format(dtype))
         self._dtype = dtype
+        self._prng = value.parse_random_state(seed)
         self._intermediate = intermediate
 
         circuit = (program if isinstance(program, circuits.Circuit) else program.to_circuit())
@@ -236,6 +238,7 @@ potential ( {target_posterior} | '''
         net_file.write('net {}\n\n')
 
         # initial_state: Union[int, np.ndarray],
+        # prevent later calls to simulator from changing the initial state, if already fixed
         self._initial_state_lockout = False if initial_state is None else True
         # generate Bayesian network nodes with no priors for qubit initialization
         qubit_to_last_moment_index = {}
@@ -271,8 +274,7 @@ potential ( {target_posterior} | '''
             for op in moment:
 
                 if isinstance(op,(ops.PauliString, ops.PauliStringPhasor)) or \
-                not isinstance(op,(ops.ApproxPauliStringExpectation)) and not isinstance(op.gate,ops.MeasurementGate):
-                # ops.PauliStringExpectation,
+                not isinstance(op.gate,ops.MeasurementGate):
 
                     if isinstance(op,(ops.PauliString,ops.PauliStringPhasor)):
                         gate = None
@@ -283,6 +285,10 @@ potential ( {target_posterior} | '''
                         unitary_matrix = [[0+0j,0+0j],[0+0j,0+0j]]
                         for component in protocols.mixture(op):
                             unitary_matrix += component[0] * component[1]
+                    # elif protocols.has_channel(op):
+                    #     unitary_matrix = [[0+0j,0+0j],[0+0j,0+0j]]
+                    #     for component in protocols.channel(op):
+                    #         unitary_matrix += component
                     else:
                         unitary_matrix = protocols.unitary(op)
 
@@ -406,8 +412,6 @@ potential ( {target_posterior} | '''
         self._repetitions = repetitions
         self._subprocess.stdin.write(f'cc$R${self._repetitions}\n'.encode())
 
-        measurements = {}  # type: Dict[str, List[np.ndarray]]
-
         all_step_results = self._base_iterator(
                 param_resolver=param_resolver,
                 initial_state=0)
@@ -415,6 +419,19 @@ potential ( {target_posterior} | '''
         for step_result in all_step_results:
             pass
         return step_result.measurements
+
+        # for step_result in self._base_iterator(
+        #         param_resolver=param_resolver,
+        #         initial_state=0):
+        #     pass
+        # # We can ignore the mixtures since this is a run method which
+        # # does not return the state.
+        # measurement_ops = [op for _, op, _ in
+        #                    circuit.findall_operations_with_gate_type(
+        #                            ops.MeasurementGate)]
+        # return step_result.sample_measurement_ops(measurement_ops,
+        #                                           repetitions,
+        #                                           seed=self._prng)
 
     def _run_sweep_repeat(
         self,
@@ -434,24 +451,19 @@ potential ( {target_posterior} | '''
                 for k, v in step_result.measurements.items():
                     if not k in measurements:
                         measurements[k] = []
-                    measurements[k].append(np.array(v, dtype=bool))
+                    measurements[k].append(np.array(v, dtype=np.uint8))
         return {k: np.array(v) for k, v in measurements.items()}
 
     def compute_amplitudes_sweep(
             self,
             program: Union[circuits.Circuit, schedules.Schedule],
-            bitstrings: np.ndarray,
+            bitstrings: Sequence[int],
             params: study.Sweepable,
             qubit_order: ops.QubitOrderOrList = ops.QubitOrder.DEFAULT,
-    ) -> List[List[complex]]:
+    ) -> Sequence[Sequence[complex]]:
 
         qid_shape = self._circuit.qid_shape(qubit_order=qubit_order)
-        self._amplitude_indices = [
-            value.big_endian_digits_to_int(bitstring, base=qid_shape)
-            # wave_function_simulator._bitstring_to_integer(bitstring)
-            for bitstring in bitstrings
-        ]
-
+        self._amplitude_indices = bitstrings
         for amplitude_index in self._amplitude_indices:
             self._subprocess.stdin.write(f'cc$A${amplitude_index}\n'.encode())
 
@@ -498,7 +510,7 @@ potential ( {target_posterior} | '''
             circuit: circuits.Circuit, # unused
             param_resolver: study.ParamResolver,
             qubit_order: ops.QubitOrderOrList, # unused
-            initial_state: Union[int, np.ndarray],
+            initial_state: 'cirq.STATE_VECTOR_LIKE',
     ) -> Iterator:
         """See definition in `cirq.SimulatesIntermediateState`.
 
@@ -519,7 +531,7 @@ potential ( {target_posterior} | '''
     def _base_iterator(
             self,
             param_resolver: study.ParamResolver,
-            initial_state: Union[int, np.ndarray],
+            initial_state: 'cirq.STATE_VECTOR_LIKE',
             perform_measurements: bool=True,
     ) -> Iterator:
 
@@ -677,7 +689,8 @@ potential ( {target_posterior} | '''
             invert_mask = meas.full_invert_mask()
             # Measure updates inline.
             bits, _ = wave_function.measure_state_vector(data,
-                                                         indices)
+                                                         indices,
+                                                         seed=self._prng)
             corrected = [bit ^ mask for bit, mask in zip(bits, invert_mask)]
             key = protocols.measurement_key(meas)
             measurements[key].extend(corrected)
