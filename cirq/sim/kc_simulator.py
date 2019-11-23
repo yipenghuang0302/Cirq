@@ -16,13 +16,13 @@
 
 import collections
 
-from typing import Any, Dict, Iterator, List, Sequence, Union
+from typing import Any, Dict, Iterator, List, Type, Sequence, Union
 
 import numbers, cmath, sympy
 import numpy as np
 
-from cirq import circuits, ops, protocols, schedules, study, optimizers, value
-from cirq.sim import simulator, wave_function, wave_function_simulator, sparse_simulator
+from cirq import circuits, ops, protocols, schedules, study, optimizers, value, devices
+from cirq.sim import simulator, wave_function, density_matrix_utils, wave_function_simulator, sparse_simulator, density_matrix_simulator
 
 import os, subprocess, re, csv, sys, time
 
@@ -200,7 +200,8 @@ potential ( {target_posterior} | '''
         qubit_order: ops.QubitOrderOrList = ops.QubitOrder.DEFAULT,
         initial_state: Any = None,
         intermediate: bool = False, # whether or not moment steps, intermediate measurement allowed.
-        dtype=np.complex64,
+        dtype: Type[np.number] = np.complex64,
+        noise: 'cirq.NOISE_MODEL_LIKE' = None,
         seed: value.RANDOM_STATE_LIKE = None):
         """A sparse matrix simulator.
 
@@ -213,6 +214,7 @@ potential ( {target_posterior} | '''
                 'dtype must be a complex type but was {}'.format(dtype))
         self._dtype = dtype
         self._prng = value.parse_random_state(seed)
+        self.noise = devices.NoiseModel.from_noise_model_like(noise)
         self._intermediate = intermediate
 
         circuit = (program if isinstance(program, circuits.Circuit) else program.to_circuit())
@@ -281,16 +283,16 @@ potential ( {target_posterior} | '''
                     else:
                         gate = op.gate
 
-                    if protocols.has_mixture(op):
+                    if protocols.has_unitary(op):
+                        unitary_matrix = protocols.unitary(op)
+                    elif protocols.has_mixture(op):
                         unitary_matrix = [[0+0j,0+0j],[0+0j,0+0j]]
                         for component in protocols.mixture(op):
                             unitary_matrix += component[0] * component[1]
-                    # elif protocols.has_channel(op):
-                    #     unitary_matrix = [[0+0j,0+0j],[0+0j,0+0j]]
-                    #     for component in protocols.channel(op):
-                    #         unitary_matrix += component
-                    else:
-                        unitary_matrix = protocols.unitary(op)
+                    else: # protocols.has_channel(op)
+                        unitary_matrix = [[0+0j,0+0j],[0+0j,0+0j]]
+                        for component in protocols.channel(op):
+                            unitary_matrix += component
 
                     transposed_cpts = self._unitary_to_transposed_cpt( gate, unitary_matrix )
 
@@ -536,11 +538,20 @@ potential ( {target_posterior} | '''
     ) -> Iterator:
 
         if len(self._circuit) == 0:
-            yield sparse_simulator.SparseSimulatorStep(
-                wave_function.to_valid_state_vector(initial_state,self._num_qubits,dtype=self._dtype),
-                {},
-                self._qubit_map,
-                self._dtype)
+            # yield sparse_simulator.SparseSimulatorStep(
+            #     wave_function.to_valid_state_vector(initial_state,self._num_qubits,dtype=self._dtype),
+            #     {},
+            #     self._qubit_map,
+            #     self._dtype)
+            yield density_matrix_simulator.DensityMatrixStepResult(
+                density_matrix=density_matrix_utils.to_valid_density_matrix(
+                    initial_state,
+                    self._num_qubits,
+                    qid_shape=protocols.qid_shape(self._qubits),
+                    dtype=self._dtype),
+                measurements={},
+                qubit_map=self._qubit_map,
+                dtype=self._dtype)
 
         else:
 
@@ -673,8 +684,18 @@ potential ( {target_posterior} | '''
                     # print("post time = ")
                     # print(time.time() - post_start)
 
-                    yield sparse_simulator.SparseSimulatorStep(
+                    # yield sparse_simulator.SparseSimulatorStep(
+                    #     state_vector=state_vector,
+                    #     measurements=measurements,
+                    #     qubit_map=self._qubit_map,
+                    #     dtype=self._dtype)
+                    sparse_simulator_step = sparse_simulator.SparseSimulatorStep(
                         state_vector=state_vector,
+                        measurements=measurements,
+                        qubit_map=self._qubit_map,
+                        dtype=self._dtype)
+                    yield density_matrix_simulator.DensityMatrixStepResult(
+                        density_matrix=sparse_simulator_step.density_matrix_of(),
                         measurements=measurements,
                         qubit_map=self._qubit_map,
                         dtype=self._dtype)
@@ -694,3 +715,13 @@ potential ( {target_posterior} | '''
             corrected = [bit ^ mask for bit, mask in zip(bits, invert_mask)]
             key = protocols.measurement_key(meas)
             measurements[key].extend(corrected)
+
+    def _create_simulator_trial_result(self,
+            params: study.ParamResolver,
+            measurements: Dict[str, np.ndarray],
+            final_simulator_state: 'DensityMatrixSimulatorState') \
+            -> 'DensityMatrixTrialResult':
+        return density_matrix_simulator.DensityMatrixTrialResult(
+            params=params,
+            measurements=measurements,
+            final_simulator_state=final_simulator_state)
