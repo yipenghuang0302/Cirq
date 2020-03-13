@@ -36,8 +36,8 @@ def assert_optimizes(
         post(before)  # type: ignore #  error: "object" not callable
         post(expected)  # type: ignore #  error: "object" not callable
 
-    assert before == expected, 'BEFORE {} : EXPECTED {}'.format(before,
-                                                                expected)
+    assert before == expected, 'BEFORE:\n{}\nEXPECTED:\n{}'.format(
+        before, expected)
 
 
 def test_leaves_singleton():
@@ -68,8 +68,7 @@ def test_combines_sequence():
     assert opt_summary.clear_span == 3
     assert list(opt_summary.clear_qubits) == [q]
     assert len(opt_summary.new_operations) == 1
-    assert isinstance(opt_summary.new_operations[0].gate,
-                      cirq.SingleQubitMatrixGate)
+    assert isinstance(opt_summary.new_operations[0].gate, cirq.MatrixGate)
     cirq.testing.assert_allclose_up_to_global_phase(
         cirq.unitary(opt_summary.new_operations[0]),
         cirq.unitary(cirq.Y**0.5),
@@ -106,8 +105,7 @@ def test_stopped_at_2qubit():
     assert list(opt_summary.clear_qubits) == [q]
     if len(opt_summary.new_operations) != 0:
         assert len(opt_summary.new_operations) == 1
-        assert isinstance(opt_summary.new_operations[0].gate,
-                          cirq.SingleQubitMatrixGate)
+        assert isinstance(opt_summary.new_operations[0].gate, cirq.MatrixGate)
         cirq.testing.assert_allclose_up_to_global_phase(
             cirq.unitary(opt_summary.new_operations[0]),
             np.eye(2),
@@ -168,17 +166,47 @@ def test_rewrite():
 
 def test_merge_single_qubit_gates_into_phased_x_z():
     a, b = cirq.LineQubit.range(2)
-    assert_optimizes(before=cirq.Circuit(
-        cirq.X(a),
-        cirq.Y(b)**0.5,
-        cirq.CZ(a, b),
-        cirq.H(a),
-        cirq.Z(a),
-    ),
-                     expected=cirq.Circuit(
-                         cirq.PhasedXPowGate(phase_exponent=1)(a),
-                         cirq.Y(b)**0.5,
-                         cirq.CZ(a, b),
-                         (cirq.PhasedXPowGate(phase_exponent=-0.5)(a))**0.5,
-                     ),
-                     optimizer=cirq.merge_single_qubit_gates_into_phased_x_z)
+    assert_optimizes(
+        before=cirq.Circuit(
+            cirq.X(a),
+            cirq.Y(b)**0.5,
+            cirq.CZ(a, b),
+            cirq.H(a),
+            cirq.Z(a),
+        ),
+        expected=cirq.Circuit(
+            cirq.PhasedXPowGate(phase_exponent=1)(a),
+            cirq.Y(b)**0.5,
+            cirq.CZ(a, b),
+            (cirq.PhasedXPowGate(phase_exponent=-0.5)(a))**0.5,
+        ),
+        optimizer=cirq.merge_single_qubit_gates_into_phased_x_z,
+    )
+
+
+def test_merge_single_qubit_gates_into_phxz():
+
+    def phxz(a, x, z):
+        return cirq.PhasedXZGate(
+            axis_phase_exponent=a,
+            x_exponent=x,
+            z_exponent=z,
+        )
+
+    a, b = cirq.LineQubit.range(2)
+    assert_optimizes(
+        before=cirq.Circuit(
+            cirq.X(a),
+            cirq.Y(b)**0.5,
+            cirq.CZ(a, b),
+            cirq.H(a),
+            cirq.Z(a),
+        ),
+        expected=cirq.Circuit(
+            phxz(-1, 1, 0).on(a),
+            phxz(0.5, 0.5, 0).on(b),
+            cirq.CZ(a, b),
+            phxz(-0.5, 0.5, 0).on(a),
+        ),
+        optimizer=cirq.merge_single_qubit_gates_into_phxz,
+    )

@@ -21,7 +21,6 @@ import pytest
 import sympy
 
 import cirq
-from cirq._compat_test import capture_logging
 
 
 def _make_qubits(n):
@@ -29,11 +28,36 @@ def _make_qubits(n):
 
 
 def _sample_qubit_pauli_maps():
+    """ All combinations of having a Pauli or nothing on 3 qubits.
+    Yields 64 qubit pauli maps
+    """
     qubits = _make_qubits(3)
     paulis_or_none = (None, cirq.X, cirq.Y, cirq.Z)
     for paulis in itertools.product(paulis_or_none, repeat=len(qubits)):
-        yield {qubit: pauli for qubit, pauli in zip(qubits, paulis)
-                            if pauli is not None}
+        yield {
+            qubit: pauli
+            for qubit, pauli in zip(qubits, paulis)
+            if pauli is not None
+        }
+
+
+def _small_sample_qubit_pauli_maps():
+    """ A few representative samples of qubit maps.
+
+    Only tests 10 combinations of Paulis to speed up testing.
+    """
+    qubits = _make_qubits(3)
+    yield {}
+    yield {qubits[0]: cirq.X}
+    yield {qubits[1]: cirq.X}
+    yield {qubits[2]: cirq.X}
+    yield {qubits[1]: cirq.Z}
+
+    yield {qubits[0]: cirq.Y, qubits[1]: cirq.Z}
+    yield {qubits[1]: cirq.Z, qubits[2]: cirq.X}
+    yield {qubits[0]: cirq.X, qubits[1]: cirq.X, qubits[2]: cirq.X}
+    yield {qubits[0]: cirq.X, qubits[1]: cirq.Y, qubits[2]: cirq.Z}
+    yield {qubits[0]: cirq.Z, qubits[1]: cirq.X, qubits[2]: cirq.Y}
 
 
 def test_eq_ne_hash():
@@ -125,16 +149,16 @@ def test_exponentiate_single_value_as_exponent():
     q = cirq.LineQubit(0)
 
     assert cirq.approx_eq(math.e**(-0.25j * math.pi * cirq.X(q)),
-                          cirq.Rx(0.25 * math.pi).on(q))
+                          cirq.rx(0.25 * math.pi).on(q))
 
     assert cirq.approx_eq(math.e**(-0.25j * math.pi * cirq.Y(q)),
-                          cirq.Ry(0.25 * math.pi).on(q))
+                          cirq.ry(0.25 * math.pi).on(q))
 
     assert cirq.approx_eq(math.e**(-0.25j * math.pi * cirq.Z(q)),
-                          cirq.Rz(0.25 * math.pi).on(q))
+                          cirq.rz(0.25 * math.pi).on(q))
 
     assert cirq.approx_eq(np.exp(-0.3j * math.pi * cirq.X(q)),
-                          cirq.Rx(0.3 * math.pi).on(q))
+                          cirq.rx(0.3 * math.pi).on(q))
 
     assert cirq.approx_eq(cirq.X(q)**0.5, cirq.XPowGate(exponent=0.5).on(q))
 
@@ -220,17 +244,6 @@ def test_constructor_flexibility():
                                 qubit_pauli_map={a: cirq.Z}, coefficient=6j)
 
 
-def test_deprecated_from_single():
-    q0 = cirq.LineQubit(0)
-    with capture_logging() as log:
-        actual = cirq.PauliString.from_single(q0, cirq.X)
-    assert len(log) == 1  # May fail if deprecated thing is used elsewhere.
-    assert 'PauliString.from_single' in log[0].getMessage()
-    assert 'deprecated' in log[0].getMessage()
-
-    assert actual == cirq.PauliString([cirq.X(q0)])
-
-
 @pytest.mark.parametrize('qubit_pauli_map', _sample_qubit_pauli_maps())
 def test_getitem(qubit_pauli_map):
     other = cirq.NamedQubit('other')
@@ -265,37 +278,26 @@ def test_contains(qubit_pauli_map):
 
 
 @pytest.mark.parametrize('qubit_pauli_map', _sample_qubit_pauli_maps())
-def test_keys(qubit_pauli_map):
+def test_basic_functionality(qubit_pauli_map):
     pauli_string = cirq.PauliString(qubit_pauli_map)
-    assert (len(qubit_pauli_map.keys()) == len(pauli_string.keys())
-            == len(pauli_string.qubits))
-    assert (set(qubit_pauli_map.keys()) == set(pauli_string.keys())
-            == set(pauli_string.qubits))
-
-
-@pytest.mark.parametrize('qubit_pauli_map', _sample_qubit_pauli_maps())
-def test_items(qubit_pauli_map):
-    pauli_string = cirq.PauliString(qubit_pauli_map)
+    # Test items
     assert len(qubit_pauli_map.items()) == len(pauli_string.items())
     assert set(qubit_pauli_map.items()) == set(pauli_string.items())
 
-
-@pytest.mark.parametrize('qubit_pauli_map', _sample_qubit_pauli_maps())
-def test_values(qubit_pauli_map):
-    pauli_string = cirq.PauliString(qubit_pauli_map)
+    # Test values
     assert len(qubit_pauli_map.values()) == len(pauli_string.values())
     assert set(qubit_pauli_map.values()) == set(pauli_string.values())
 
-
-@pytest.mark.parametrize('qubit_pauli_map', _sample_qubit_pauli_maps())
-def test_len(qubit_pauli_map):
-    pauli_string = cirq.PauliString(qubit_pauli_map)
+    # Test length
     assert len(qubit_pauli_map) == len(pauli_string)
 
+    # Test keys
+    assert (len(qubit_pauli_map.keys()) == len(pauli_string.keys()) == len(
+        pauli_string.qubits))
+    assert (set(qubit_pauli_map.keys()) == set(pauli_string.keys()) == set(
+        pauli_string.qubits))
 
-@pytest.mark.parametrize('qubit_pauli_map', _sample_qubit_pauli_maps())
-def test_iter(qubit_pauli_map):
-    pauli_string = cirq.PauliString(qubit_pauli_map)
+    # Test iteration
     assert len(tuple(qubit_pauli_map)) == len(tuple(pauli_string))
     assert set(tuple(qubit_pauli_map)) == set(tuple(pauli_string))
 
@@ -360,44 +362,41 @@ def test_zip_paulis(map1, map2, out):
     assert set(out_actual) == set(out)  # Ignore output order
 
 
-def test_commutes_with():
-    q0, q1, q2 = _make_qubits(3)
+def test_commutes():
+    qubits = _make_qubits(3)
 
-    assert cirq.PauliString([cirq.X.on(q0)
-                            ]).commutes_with(cirq.PauliString([cirq.X.on(q0)]))
-    assert not cirq.PauliString([cirq.X.on(q0)]).commutes_with(
-        cirq.PauliString([cirq.Y.on(q0)]))
-    assert cirq.PauliString([cirq.X.on(q0)
-                            ]).commutes_with(cirq.PauliString([cirq.X.on(q1)]))
-    assert cirq.PauliString([cirq.X.on(q0)
-                            ]).commutes_with(cirq.PauliString([cirq.Y.on(q1)]))
+    ps1 = cirq.PauliString([cirq.X(qubits[0])])
+    with pytest.raises(TypeError):
+        cirq.commutes(ps1, 'X')
+    assert cirq.commutes(ps1, 'X', default='default') == 'default'
+    for A, commutes in [(cirq.X, True), (cirq.Y, False)]:
+        assert (cirq.commutes(ps1,
+                              cirq.PauliString([A(qubits[0])])) == commutes)
+        assert cirq.commutes(ps1, cirq.PauliString([A(qubits[1])]))
 
-    assert cirq.PauliString({q0: cirq.X, q1: cirq.Y}).commutes_with(
-           cirq.PauliString({q0: cirq.X, q1: cirq.Y}))
-    assert not cirq.PauliString({q0: cirq.X, q1: cirq.Y}).commutes_with(
-               cirq.PauliString({q0: cirq.X, q1: cirq.Z}))
-    assert cirq.PauliString({q0: cirq.X, q1: cirq.Y}).commutes_with(
-           cirq.PauliString({q0: cirq.Y, q1: cirq.X}))
-    assert cirq.PauliString({q0: cirq.X, q1: cirq.Y}).commutes_with(
-           cirq.PauliString({q0: cirq.Y, q1: cirq.Z}))
+    ps1 = cirq.PauliString(dict(zip(qubits, (cirq.X, cirq.Y))))
 
-    assert cirq.PauliString({q0: cirq.X, q1: cirq.Y}).commutes_with(
-           cirq.PauliString({q0: cirq.X, q1: cirq.Y, q2: cirq.Z}))
-    assert not cirq.PauliString({q0: cirq.X, q1: cirq.Y}).commutes_with(
-               cirq.PauliString({q0: cirq.X, q1: cirq.Z, q2: cirq.Z}))
-    assert cirq.PauliString({q0: cirq.X, q1: cirq.Y}).commutes_with(
-           cirq.PauliString({q0: cirq.Y, q1: cirq.X, q2: cirq.Z}))
-    assert cirq.PauliString({q0: cirq.X, q1: cirq.Y}).commutes_with(
-           cirq.PauliString({q0: cirq.Y, q1: cirq.Z, q2: cirq.X}))
+    for paulis, commutes in {
+        (cirq.X, cirq.Y): True,
+        (cirq.X, cirq.Z): False,
+        (cirq.Y, cirq.X): True,
+        (cirq.Y, cirq.Z): True,
+        (cirq.X, cirq.Y, cirq.Z): True,
+        (cirq.X, cirq.Z, cirq.Z): False,
+        (cirq.Y, cirq.X, cirq.Z): True,
+        (cirq.Y, cirq.Z, cirq.X): True,
+    }.items():
+        ps2 = cirq.PauliString(dict(zip(qubits, paulis)))
+        assert cirq.commutes(ps1, ps2) == commutes
 
-    assert cirq.PauliString({q0: cirq.X, q1: cirq.Y}).commutes_with(
-           cirq.PauliString({q2: cirq.X, q1: cirq.Y}))
-    assert not cirq.PauliString({q0: cirq.X, q1: cirq.Y}).commutes_with(
-               cirq.PauliString({q2: cirq.X, q1: cirq.Z}))
-    assert not cirq.PauliString({q0: cirq.X, q1: cirq.Y}).commutes_with(
-               cirq.PauliString({q2: cirq.Y, q1: cirq.X}))
-    assert not cirq.PauliString({q0: cirq.X, q1: cirq.Y}).commutes_with(
-               cirq.PauliString({q2: cirq.Y, q1: cirq.Z}))
+    for paulis, commutes in {
+        (cirq.Y, cirq.X): True,
+        (cirq.Z, cirq.X): False,
+        (cirq.X, cirq.Y): False,
+        (cirq.Z, cirq.Y): False,
+    }.items():
+        ps2 = cirq.PauliString(dict(zip(qubits[1:], paulis)))
+        assert cirq.commutes(ps1, ps2) == commutes
 
 
 def test_negate():
@@ -689,7 +688,7 @@ def test_with_qubits():
     assert new_pauli_string.coefficient == -1
 
 
-@pytest.mark.parametrize('qubit_pauli_map', _sample_qubit_pauli_maps())
+@pytest.mark.parametrize('qubit_pauli_map', _small_sample_qubit_pauli_maps())
 def test_consistency(qubit_pauli_map):
     pauli_string = cirq.PauliString(qubit_pauli_map)
     cirq.testing.assert_implements_consistent_protocols(pauli_string)
@@ -1250,7 +1249,7 @@ def test_pauli_string_expectation_from_density_matrix_pure_state_with_coef():
 
 
 def test_pauli_string_expectation_from_wavefunction_mixed_state_linearity():
-    n_qubits = 10
+    n_qubits = 6
 
     wavefunction1 = cirq.testing.random_superposition(2**n_qubits)
     wavefunction2 = cirq.testing.random_superposition(2**n_qubits)
@@ -1424,7 +1423,7 @@ def test_conjugated_by_common_two_qubit_gates():
             return [cirq.Y(qubits[0])**-0.5, cirq.CNOT(*qubits)]
 
     a, b, c, d = cirq.LineQubit.range(4)
-    base_two_qubit_gates = [
+    two_qubit_gates = [
         cirq.CNOT,
         cirq.CZ,
         cirq.ISWAP,
@@ -1433,19 +1432,21 @@ def test_conjugated_by_common_two_qubit_gates():
         cirq.XX**0.5,
         cirq.YY**0.5,
         cirq.ZZ**0.5,
+        cirq.XX,
+        cirq.YY,
+        cirq.ZZ,
         cirq.XX**-0.5,
         cirq.YY**-0.5,
         cirq.ZZ**-0.5,
     ]
-    two_qubit_gates = [g**i for i in range(4) for g in base_two_qubit_gates]
     two_qubit_gates.extend([
         OrderSensitiveGate(),
     ])
     for p1 in [cirq.I, cirq.X, cirq.Y, cirq.Z]:
         for p2 in [cirq.I, cirq.X, cirq.Y, cirq.Z]:
+            pd = cirq.DensePauliString([p1, p2])
+            p = pd.sparse()
             for g in two_qubit_gates:
-                pd = cirq.DensePauliString([p1, p2])
-                p = pd.sparse()
                 assert p.conjugated_by(g.on(c, d)) == p
 
                 actual = cirq.unitary(p.conjugated_by(g.on(a, b)).dense([a, b]))

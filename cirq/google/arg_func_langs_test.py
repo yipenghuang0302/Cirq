@@ -25,7 +25,7 @@ from cirq.google.arg_func_langs import (
     ARG_LIKE,
     LANGUAGE_ORDER,
 )
-from cirq.api.google import v2
+from cirq.google.api import v2
 
 
 @pytest.mark.parametrize('min_lang,value,proto', [
@@ -153,12 +153,4 @@ def test_infer_language():
 
     c_empty = cirq.Circuit(cirq.X(q)**b)
     packed = cirq.google.XMON.serialize(c_empty)
-    assert packed.language.arg_function_language == ''
-
-    s_linear = cirq.moment_by_moment_schedule(cirq.google.Foxtail, c_linear)
-    packed = cirq.google.XMON.serialize(s_linear)
-    assert packed.language.arg_function_language == 'linear'
-
-    s_empty = cirq.moment_by_moment_schedule(cirq.google.Foxtail, c_empty)
-    packed = cirq.google.XMON.serialize(s_empty)
     assert packed.language.arg_function_language == ''

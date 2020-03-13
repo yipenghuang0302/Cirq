@@ -25,14 +25,17 @@ https://gateway-portal.aqt.eu/
 import json
 import time
 import uuid
-from typing import Iterable, List, Union, Tuple, Dict, cast
+from typing import Iterable, List, Union, Tuple, Dict, cast, TYPE_CHECKING
 
 import numpy as np
 from requests import put
 from cirq import circuits, Sampler, resolve_parameters, LineQubit
 from cirq.study.sweeps import Sweep
 from cirq.aqt.aqt_device import AQTSimulator, get_op_string
-from cirq import study, ops, schedules, IonDevice
+from cirq import study, ops, IonDevice
+
+if TYPE_CHECKING:
+    import cirq
 
 Sweepable = Union[study.ParamResolver, Iterable[study.ParamResolver], Sweep,
                   Iterable[Sweep]]
@@ -79,15 +82,22 @@ class AQTSampler(Sampler):
             json formatted string of the sequence
         """
 
-        seq_list: List[Tuple[str, float, List[int]]] = []
+        seq_list: List[Union[Tuple[str, float, List[int]],
+                             Tuple[str, float, float, List[int]]]] = []
         circuit = resolve_parameters(circuit, param_resolver)
         for op in circuit.all_operations():
             line_qubit = cast(Tuple[LineQubit], op.qubits)
             op = cast(ops.GateOperation, op)
             qubit_idx = [obj.x for obj in line_qubit]
             op_str = get_op_string(op)
-            gate = cast(ops.EigenGate, op.gate)
-            seq_list.append((op_str, gate.exponent, qubit_idx))
+            gate: Union[ops.EigenGate, ops.PhasedXPowGate]
+            if op_str == 'R':
+                gate = cast(ops.PhasedXPowGate, op.gate)
+                seq_list.append((op_str, float(gate.exponent),
+                                 float(gate.phase_exponent), qubit_idx))
+            else:
+                gate = cast(ops.EigenGate, op.gate)
+                seq_list.append((op_str, float(gate.exponent), qubit_idx))
         if len(seq_list) == 0:
             raise RuntimeError('Cannot send an empty circuit')
         json_str = json.dumps(seq_list)
@@ -163,21 +173,22 @@ class AQTSampler(Sampler):
         measurements_int = data['samples']
         measurements = np.zeros((len(measurements_int), num_qubits))
         for i, result_int in enumerate(measurements_int):
+            measurement_int_bin = format(result_int, '0{}b'.format(num_qubits))
             for j in range(num_qubits):
-                measurements[i, j] = np.floor(result_int / 2**j)
+                measurements[i, j] = int(measurement_int_bin[j])
         return measurements
 
     def run_sweep(self,
-                  program: Union[circuits.Circuit, schedules.Schedule],
+                  program: 'cirq.Circuit',
                   params: study.Sweepable,
                   repetitions: int = 1) -> List[study.TrialResult]:
-        """Samples from the given Circuit or Schedule.
+        """Samples from the given Circuit.
 
         In contrast to run, this allows for sweeping over different parameter
         values.
 
         Args:
-            program: The circuit or schedule to simulate.
+            program: The circuit to simulate.
             Should be generated using AQTSampler.generate_circuit_from_list
             params: Parameters to run with the program.
             repetitions: The number of repetitions to simulate.
@@ -187,14 +198,12 @@ class AQTSampler(Sampler):
             resolver.
         """
         meas_name = 'm'  # TODO: Get measurement name from circuit. Issue #2195
-        circuit = (program.to_circuit()
-                   if isinstance(program, schedules.Schedule) else program)
-        assert isinstance(circuit.device, IonDevice)
+        assert isinstance(program.device, IonDevice)
         trial_results = []  # type: List[study.TrialResult]
         for param_resolver in study.to_resolvers(params):
             id_str = uuid.uuid1()
-            num_qubits = len(circuit.device.qubits)
-            json_str = self._generate_json(circuit=circuit,
+            num_qubits = len(program.device.qubits)
+            json_str = self._generate_json(circuit=program,
                                            param_resolver=param_resolver)
             results = self._send_json(json_str=json_str,
                                       id_str=id_str,

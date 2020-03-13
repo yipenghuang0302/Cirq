@@ -1,4 +1,4 @@
-from typing import cast, List, Tuple
+from typing import cast
 import numpy as np
 import pytest
 import sympy
@@ -22,7 +22,7 @@ def _unitaries_allclose(circuit1, circuit2):
     [
         (cast(cirq.Gate, cirq.ISWAP), 7),  # cast is for fixing mypy confusion
         (cirq.CZ, 8),
-        (cirq.SWAP, 13),
+        (cirq.SWAP, 7),
         (cirq.CNOT, 9),
         (cirq.ISWAP**0.5, 1),
         (cirq.ISWAP**-0.5, 1),
@@ -74,7 +74,7 @@ def test_two_qubit_gates_with_symbols(gate: cirq.Gate, expected_length: int):
     assert len(converted_circuit) <= expected_length
 
     # Check if unitaries are the same
-    for val in np.linspace(0, 2 * np.pi, 20):
+    for val in np.linspace(0, 2 * np.pi, 12):
         assert _unitaries_allclose(
             cirq.resolve_parameters(original_circuit, {'t': val}),
             cirq.resolve_parameters(converted_circuit, {'t': val}))
@@ -87,7 +87,7 @@ def test_cphase():
     for theta in thetas:
         expected = cirq.CZPowGate(exponent=theta)
         decomposition = cgoc.cphase_to_sqrt_iswap(qubits[0], qubits[1], theta)
-        actual = cirq.Circuit.from_ops(decomposition)
+        actual = cirq.Circuit(decomposition)
         expected_unitary = cirq.unitary(expected)
         actual_unitary = cirq.unitary(actual)
         np.testing.assert_allclose(expected_unitary, actual_unitary, atol=1e-07)
@@ -98,8 +98,7 @@ def test_givens_rotation():
     thetas = np.linspace(0, 2 * np.pi, 100)
     qubits = [cirq.NamedQubit('a'), cirq.NamedQubit('b')]
     for theta in thetas:
-        program = cirq.Circuit.from_ops(
-            cirq.GivensRotation(theta).on(qubits[0], qubits[1]))
+        program = cirq.Circuit(cirq.givens(theta).on(qubits[0], qubits[1]))
         unitary = cirq.unitary(program)
         test_program = program.copy()
         cgoc.ConvertToSqrtIswapGates().optimize_circuit(test_program)

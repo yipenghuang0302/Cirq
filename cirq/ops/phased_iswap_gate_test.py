@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import itertools
-
 import numpy as np
 import pytest
 import scipy
 import sympy
 
 import cirq
+from cirq._compat_test import capture_logging
 
 np.set_printoptions(linewidth=300)
 
@@ -96,11 +95,23 @@ def test_decompose_invalid_qubits():
         cirq.protocols.decompose_once_with_qubits(cirq.PhasedISwapPowGate(), qs)
 
 
-@pytest.mark.parametrize('phase_exponent, exponent',
-                         itertools.product(
-                             (-0.3, 0, 0.1, 0.5, 1, 2, sympy.Symbol('p')),
-                             (-0.1, 0, 0.1, 1, sympy.Symbol('t')),
-                         ))
+@pytest.mark.parametrize('phase_exponent, exponent', [
+    (0, 0),
+    (0, 0.1),
+    (0, 0.5),
+    (0, -1),
+    (-0.3, 0),
+    (0.1, 0.1),
+    (0.1, 0.5),
+    (0.5, 0.5),
+    (-0.1, 0.1),
+    (-0.5, 1),
+    (0.3, 2),
+    (0.4, -2),
+    (0.1, sympy.Symbol('p')),
+    (sympy.Symbol('t'), 0.5),
+    (sympy.Symbol('t'), sympy.Symbol('p')),
+])
 def test_phased_iswap_has_consistent_protocols(phase_exponent, exponent):
     cirq.testing.assert_implements_consistent_protocols(
         cirq.PhasedISwapPowGate(phase_exponent=phase_exponent,
@@ -114,7 +125,7 @@ def test_diagram():
         cirq.PhasedISwapPowGate(phase_exponent=sympy.Symbol('p'),
                                 exponent=sympy.Symbol('t')).on(q0, q1),
         cirq.PhasedISwapPowGate(phase_exponent=2 * sympy.Symbol('p'),
-                                exponent=1 - sympy.Symbol('t')).on(q0, q1),
+                                exponent=1 + sympy.Symbol('t')).on(q0, q1),
         cirq.PhasedISwapPowGate(phase_exponent=0.2, exponent=1).on(q0, q1),
         cirq.PhasedISwapPowGate(phase_exponent=0.3, exponent=0.4).on(q0, q1),
     )
@@ -122,7 +133,7 @@ def test_diagram():
         c, """
 0: ───PhISwap(p)─────PhISwap(2*p)───────────PhISwap(0.2)───PhISwap(0.3)───────
       │              │                      │              │
-1: ───PhISwap(p)^t───PhISwap(2*p)^(1 - t)───PhISwap(0.2)───PhISwap(0.3)^0.4───
+1: ───PhISwap(p)^t───PhISwap(2*p)^(t + 1)───PhISwap(0.2)───PhISwap(0.3)^0.4───
 """)
 
 
@@ -174,6 +185,9 @@ def test_givens_rotation_has_consistent_protocols(angle_rads):
 
 @pytest.mark.parametrize('angle_rads', (-1, -0.3, 0.1, 1))
 def test_deprecated_givens_rotation(angle_rads):
-    assert np.all(
-        cirq.unitary(cirq.GivensRotation(angle_rads)) == cirq.unitary(
-            cirq.givens(angle_rads)))
+    with capture_logging() as log:
+        u = cirq.unitary(cirq.GivensRotation(angle_rads))
+    assert len(log) == 1
+    assert 'deprecated' in log[0].getMessage()
+    assert 'GivensRotation' in log[0].getMessage()
+    np.testing.assert_allclose(u, cirq.unitary(cirq.givens(angle_rads)))

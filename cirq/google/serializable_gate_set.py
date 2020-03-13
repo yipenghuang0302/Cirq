@@ -14,20 +14,16 @@
 """Support for serializing and deserializing cirq.google.api.v2 protos."""
 
 from typing import (
-    cast,
     Dict,
     Iterable,
     List,
     Optional,
     Tuple,
     Type,
-    Union,
     TYPE_CHECKING,
 )
 
-from google.protobuf import json_format
-
-from cirq import circuits, ops, schedules, value
+from cirq import circuits, ops
 from cirq.google import op_deserializer, op_serializer, arg_func_langs
 from cirq.google.api import v2
 
@@ -90,43 +86,26 @@ class SerializableGateSet:
     def supported_gate_types(self) -> Tuple:
         return tuple(self.serializers.keys())
 
-    def is_supported_gate(self, gate: 'cirq.Gate') -> bool:
+    def is_supported_operation(self, op: 'cirq.Operation') -> bool:
         """Whether or not the given gate can be serialized by this gate set."""
+        gate = op.gate
         for gate_type_mro in type(gate).mro():
             if gate_type_mro in self.serializers:
                 for serializer in self.serializers[gate_type_mro]:
-                    if serializer.can_serialize_gate(gate):
+                    if serializer.can_serialize_operation(op):
                         return True
         return False
 
-    def serialize_dict(self,
-                       program: Union[circuits.Circuit, schedules.Schedule],
-                       *,
-                       arg_function_language: Optional[str] = None) -> Dict:
-        """Serialize a Circuit or Schedule to cirq.google.api.v2.Program proto.
-
-        Args:
-            program: The Circuit or Schedule to serialize.
-
-        Returns:
-            A dictionary corresponding to the cirq.google.api.v2.Program proto.
-        """
-        return json_format.MessageToDict(self.serialize(
-            program, arg_function_language=arg_function_language),
-                                         including_default_value_fields=True,
-                                         preserving_proto_field_name=True,
-                                         use_integers_for_enums=True)
-
     def serialize(self,
-                  program: Union[circuits.Circuit, schedules.Schedule],
+                  program: 'cirq.Circuit',
                   msg: Optional[v2.program_pb2.Program] = None,
                   *,
                   arg_function_language: Optional[str] = None
                  ) -> v2.program_pb2.Program:
-        """Serialize a Circuit or Schedule to cirq.google.api.v2.Program proto.
+        """Serialize a Circuit to cirq.google.api.v2.Program proto.
 
         Args:
-            program: The Circuit or Schedule to serialize.
+            program: The Circuit to serialize.
         """
         if msg is None:
             msg = v2.program_pb2.Program()
@@ -139,38 +118,11 @@ class SerializableGateSet:
                 arg_function_language = (
                     arg_func_langs._infer_function_language_from_circuit(
                         msg.circuit))
-        elif isinstance(program, schedules.Schedule):
-            self._serialize_schedule(
-                program,
-                msg.schedule,
-                arg_function_language=arg_function_language)
-            if arg_function_language is None:
-                arg_function_language = (
-                    arg_func_langs._infer_function_language_from_schedule(
-                        msg.schedule))
         else:
             raise NotImplementedError(
                 f'Unrecognized program type: {type(program)}')
         msg.language.arg_function_language = arg_function_language
         return msg
-
-    def serialize_op_dict(self,
-                          op: 'cirq.Operation',
-                          *,
-                          arg_function_language: Optional[str] = '') -> Dict:
-        """Serialize an Operation to cirq.google.api.v2.Operation proto.
-
-        Args:
-            op: The operation to serialize.
-
-        Returns:
-            A dictionary corresponds to the cirq.google.api.v2.Operation proto.
-        """
-        return json_format.MessageToDict(self.serialize_op(
-            op, arg_function_language=arg_function_language),
-                                         including_default_value_fields=True,
-                                         preserving_proto_field_name=True,
-                                         use_integers_for_enums=True)
 
     def serialize_op(
             self,
@@ -187,8 +139,7 @@ class SerializableGateSet:
         Returns:
             A dictionary corresponds to the cirq.google.api.v2.Operation proto.
         """
-        gate_op = cast(ops.GateOperation, op)
-        gate_type = type(gate_op.gate)
+        gate_type = type(op.gate)
         for gate_type_mro in gate_type.mro():
             # Check all super classes in method resolution order.
             if gate_type_mro in self.serializers:
@@ -196,38 +147,16 @@ class SerializableGateSet:
                 # None, then skip.
                 for serializer in self.serializers[gate_type_mro]:
                     proto_msg = serializer.to_proto(
-                        gate_op,
-                        msg,
-                        arg_function_language=arg_function_language)
+                        op, msg, arg_function_language=arg_function_language)
                     if proto_msg is not None:
                         return proto_msg
         raise ValueError('Cannot serialize op {!r} of type {}'.format(
-            gate_op, gate_type))
-
-    def deserialize_dict(self,
-                         proto: Dict,
-                         device: Optional['cirq.Device'] = None
-                        ) -> Union[circuits.Circuit, schedules.Schedule]:
-        """Deserialize a Circuit or Schedule from a cirq.google.api.v2.Program.
-
-        Args:
-            proto: A dictionary representing a cirq.google.api.v2.Program proto.
-            device: If the proto is for a schedule, a device is required
-                Otherwise optional.
-
-        Returns:
-            The deserialized Circuit or Schedule, with a device if device was
-            not None.
-        """
-        msg = v2.program_pb2.Program()
-        json_format.ParseDict(proto, msg)
-        return self.deserialize(msg, device)
+            op, gate_type))
 
     def deserialize(self,
                     proto: v2.program_pb2.Program,
-                    device: Optional['cirq.Device'] = None
-                   ) -> Union[circuits.Circuit, schedules.Schedule]:
-        """Deserialize a Circuit or Schedule from a cirq.google.api.v2.Program.
+                    device: Optional['cirq.Device'] = None) -> 'cirq.Circuit':
+        """Deserialize a Circuit from a cirq.google.api.v2.Program.
 
         Args:
             proto: A dictionary representing a cirq.google.api.v2.Program proto.
@@ -235,7 +164,7 @@ class SerializableGateSet:
                 Otherwise optional.
 
         Returns:
-            The deserialized Circuit or Schedule, with a device if device was
+            The deserialized Circuit, with a device if device was
             not None.
         """
         if not proto.HasField('language') or not proto.language.gate_set:
@@ -259,27 +188,7 @@ class SerializableGateSet:
                 device,
                 arg_function_language=proto.language.arg_function_language)
 
-        raise ValueError(
-            'Program proto does not contain a circuit or schedule.')
-
-    def deserialize_op_dict(self,
-                            operation_proto: Dict,
-                            *,
-                            arg_function_language: str = ''
-                           ) -> 'cirq.Operation':
-        """Deserialize an Operation from a cirq.google.api.v2.Operation.
-
-        Args:
-            operation_proto: A dictionary representing a
-                cirq.google.api.v2.Operation proto.
-
-        Returns:
-            The deserialized Operation.
-        """
-        msg = v2.program_pb2.Operation()
-        json_format.ParseDict(operation_proto, msg)
-        return self.deserialize_op(msg,
-                                   arg_function_language=arg_function_language)
+        raise NotImplementedError('Program proto does not contain a circuit.')
 
     def deserialize_op(
             self,
@@ -319,16 +228,6 @@ class SerializableGateSet:
                                   moment_proto.operations.add(),
                                   arg_function_language=arg_function_language)
 
-    def _serialize_schedule(self, schedule: schedules.Schedule,
-                            msg: v2.program_pb2.Schedule, *,
-                            arg_function_language: Optional[str]) -> None:
-        for scheduled_op in schedule.scheduled_operations:
-            scheduled_op_proto = msg.scheduled_operations.add()
-            scheduled_op_proto.start_time_picos = scheduled_op.time.raw_picos()
-            self.serialize_op(scheduled_op.operation,
-                              scheduled_op_proto.operation,
-                              arg_function_language=arg_function_language)
-
     def _deserialize_circuit(
             self,
             circuit_proto: v2.program_pb2.Circuit,
@@ -353,17 +252,14 @@ class SerializableGateSet:
 
     def _deserialize_schedule(self, schedule_proto: v2.program_pb2.Schedule,
                               device: 'cirq.Device', *,
-                              arg_function_language: str) -> schedules.Schedule:
-        scheduled_ops = []
+                              arg_function_language: str) -> 'cirq.Circuit':
+        result = []
         for scheduled_op_proto in schedule_proto.scheduled_operations:
             if not scheduled_op_proto.HasField('operation'):
                 raise ValueError('Scheduled op missing an operation {}'.format(
                     scheduled_op_proto))
-            scheduled_op = schedules.ScheduledOperation.op_at_on(
-                operation=self.deserialize_op(
+            result.append(
+                self.deserialize_op(
                     scheduled_op_proto.operation,
-                    arg_function_language=arg_function_language),
-                time=value.Timestamp(picos=scheduled_op_proto.start_time_picos),
-                device=device)
-            scheduled_ops.append(scheduled_op)
-        return schedules.Schedule(device, scheduled_ops)
+                    arg_function_language=arg_function_language))
+        return circuits.Circuit(result, device=device)
