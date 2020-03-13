@@ -13,44 +13,94 @@ import math
 
 def main():
 
-    q0,q1,q2,q3 = cirq.LineQubit.range(4)
-    for iteration in range(4):
-        random_circuit = cirq.testing.random_circuit(qubits=[q0,q1,q2,q3],
-                                                     n_moments=32,
-                                                     op_density=0.99)
-        simulator = cirq.KnowledgeCompilationSimulator(random_circuit)
-        circuit_unitary = []
-        for x in range(16):
-            result = simulator.simulate(random_circuit,
-                                        initial_state=x)
-            circuit_unitary.append(result.final_state)
-
-        print ("np.transpose(circuit_unitary) = ")
-        print (np.transpose(circuit_unitary))
-        print ("random_circuit.unitary() = ")
-        print (random_circuit.unitary())
-        np.testing.assert_almost_equal(
-            np.transpose(circuit_unitary),
-            random_circuit.unitary(),
-            decimal=4)
-
-    # # Pick a qubit.
-    # q0, q1 = cirq.LineQubit.range(2)
+    # q0,q1,q2,q3 = cirq.LineQubit.range(4)
+    # for iteration in range(4):
+    #     random_circuit = cirq.testing.random_circuit(qubits=[q0,q1,q2,q3],
+    #                                                  n_moments=32,
+    #                                                  op_density=0.99)
+    #     simulator = cirq.KnowledgeCompilationSimulator(random_circuit)
+    #     circuit_unitary = []
+    #     for x in range(16):
+    #         result = simulator.simulate(random_circuit,
+    #                                     initial_state=x)
+    #         circuit_unitary.append(result.final_state)
     #
-    # # Create a circuit
-    # circuit = cirq.Circuit.from_ops(
-    #     cirq.X(qubit)**0.5,  # Square root of NOT.
-    #     cirq.measure(qubit, key='m')  # Measurement.
-    # )
-    # print("Circuit:")
+    #     print ("np.transpose(circuit_unitary) = ")
+    #     print (np.transpose(circuit_unitary))
+    #     print ("random_circuit.unitary() = ")
+    #     print (random_circuit.unitary())
+    #     np.testing.assert_almost_equal(
+    #         np.transpose(circuit_unitary),
+    #         random_circuit.unitary(),
+    #         decimal=4)
+
+    q0,q1 = cirq.LineQubit.range(2)
+    for iteration in range(1):
+        random_circuit = cirq.testing.random_circuit(qubits=[q0,q1],
+                                                     n_moments=2,
+                                                     op_density=0.99)
+        print("random_circuit:")
+        print(random_circuit)
+
+        # noise = cirq.ConstantQubitNoiseModel(cirq.depolarize(0.5)) # symmetric depolarizing
+        # noise = cirq.ConstantQubitNoiseModel(cirq.phase_flip(0.5)) # mixture
+        # noise = cirq.ConstantQubitNoiseModel(cirq.bit_flip(0.25)) # mixture
+
+        # noise = cirq.ConstantQubitNoiseModel(cirq.amplitude_damp(0.5))
+        # noise = cirq.ConstantQubitNoiseModel(cirq.phase_damp(0.5))
+
+        # kc_simulator = cirq.KnowledgeCompilationSimulator(random_circuit, noise=noise)
+        # dm_simulator = cirq.DensityMatrixSimulator(noise=noise)
+
+        kc_simulator = cirq.KnowledgeCompilationSimulator(random_circuit)
+        dm_simulator = cirq.DensityMatrixSimulator()
+
+        for initial_state in range(1):
+
+            kc_result = kc_simulator.simulate(random_circuit, initial_state=initial_state)
+            print("kc_result:")
+            print(kc_result)
+
+            dm_result = dm_simulator.simulate(random_circuit,initial_state=initial_state)
+            print("dm_result:")
+            print(dm_result)
+
+            np.testing.assert_almost_equal(
+                kc_result.final_density_matrix,
+                dm_result.final_density_matrix,
+                decimal=4)
+
+    # q0 = cirq.LineQubit(0)
+    #
+    # circuit = cirq.Circuit(cirq.Y(q0))
+    # print("circuit:")
     # print(circuit)
     #
-    # # Simulate the circuit several times.
-    # simulator = cirq.KnolwedgeCompilationSimulator(circuit)
-    # result = simulator.simulate(circuit)
-    # print("Results:")
-    # print(result)
-
+    # # noise = cirq.ConstantQubitNoiseModel(cirq.depolarize(0.5)) # symmetric depolarizing
+    # # noise = cirq.ConstantQubitNoiseModel(cirq.phase_flip(0.5)) # mixture
+    # noise = cirq.ConstantQubitNoiseModel(cirq.bit_flip(0.5)) # mixture
+    #
+    # # noise = cirq.ConstantQubitNoiseModel(cirq.amplitude_damp(0.5))
+    # # noise = cirq.ConstantQubitNoiseModel(cirq.phase_damp(0.5))
+    #
+    #
+    # initial_state = 0
+    #
+    # kc_simulator = cirq.KnowledgeCompilationSimulator(circuit, initial_state=initial_state, noise=noise)
+    # dm_simulator = cirq.DensityMatrixSimulator(noise=noise)
+    #
+    # kc_result = kc_simulator.simulate(circuit)
+    # print("kc_result:")
+    # print(kc_result)
+    #
+    # dm_result = dm_simulator.simulate(circuit,initial_state=initial_state)
+    # print("dm_result:")
+    # print(dm_result)
+    #
+    # np.testing.assert_almost_equal(
+    #     kc_result.final_density_matrix,
+    #     dm_result.final_density_matrix,
+    #     decimal=4)
 
 if __name__ == '__main__':
     main()
