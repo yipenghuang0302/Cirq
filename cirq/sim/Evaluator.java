@@ -28,6 +28,8 @@ public class Evaluator {
   static OnlineEngineSop g;
   static int qubitCount;
   static int[] qubitFinalToVar;
+  static int noiseCount;
+  static int[] noiseRVToVar;
   static Evidence evidence;
   static long evidenceDuration;
   static long evaluationDuration;
@@ -46,6 +48,7 @@ public class Evaluator {
         args[1],
         true);
     qubitCount = Integer.parseInt(args[2]);
+    noiseCount = Integer.parseInt(args[3]);
 
     // Obtain some objects representing variables in the network.  We are not
     // creating network variables here, just retrieving them by name from the
@@ -67,6 +70,18 @@ public class Evaluator {
           }
         }
 
+        noiseRVToVar = new int[noiseCount];
+        int noiseRVIndex = 0;
+        for (int var = 0; var < g.numVariables(); var++) {
+          if (g.nameForVar(var).endsWith("rv")) {
+            noiseRVToVar[noiseRVIndex++] = var;
+          }
+        }
+        assert noiseRVIndex == noiseCount;
+        for (noiseRVIndex=0; noiseRVIndex<noiseCount; noiseRVIndex++) {
+          System.out.println(g.nameForVar(noiseRVToVar[noiseRVIndex]));
+        }
+
         // Construct evidence.
         evidence = new Evidence(g);
         evidenceDuration = 0L;
@@ -80,12 +95,12 @@ public class Evaluator {
         if ( g.repetitions!=0 ) {
           long outputQubitString = ThreadLocalRandom.current().nextLong( 1L<<qubitCount );
           for ( int iter=0; iter<32; iter++ ) { // warmup
-            Complex markovAmplitude = findAmplitude(outputQubitString, false);
+            Complex markovAmplitude = findAmplitude(0, outputQubitString, false); // TODO: enable noise
             outputQubitString = findDerivatives(outputQubitString);
           }
           for ( int iter=0; iter<g.repetitions; iter++ ) {
             long amplitudeStart = System.nanoTime();
-            Complex markovAmplitude = findAmplitude(outputQubitString, true);
+            Complex markovAmplitude = findAmplitude(0, outputQubitString, true);  // TODO: enable noise
             amplitudeDuration += System.nanoTime()-amplitudeStart;
 
             long derivativesStart = System.nanoTime();
@@ -98,15 +113,17 @@ public class Evaluator {
           System.out.println( String.format("derivatives time=%16d",derivativesDuration) );
         } else if (!g.bitstrings.isEmpty()) {
           for (int outputQubitString: g.bitstrings) {
-            Complex amplitude = findAmplitude(outputQubitString, true);
+            Complex amplitude = findAmplitude(0, outputQubitString, true); // TODO: enable noise
           }
         } else {
-          double probabilitySum = 0.0;
-          for (long outputQubitString=0; outputQubitString<1L<<qubitCount; outputQubitString++) {
-            Complex amplitude = findAmplitude(outputQubitString, true);
-            probabilitySum += amplitude.abs() * amplitude.abs();
+          for (long noiseString=0; noiseString<1L<<noiseCount; noiseString++) {
+            double probabilitySum = 0.0;
+            for (long outputQubitString=0; outputQubitString<1L<<qubitCount; outputQubitString++) {
+              Complex amplitude = findAmplitude(noiseString, outputQubitString, true);
+              probabilitySum += amplitude.abs() * amplitude.abs();
+            }
+            assert Math.abs(probabilitySum-1.0) < 1.0/65536.0;
           }
-          assert Math.abs(probabilitySum-1.0) < 1.0/65536.0;
         }
 
         csv.close();
@@ -124,11 +141,17 @@ public class Evaluator {
   static long prevQubitString = Long.MAX_VALUE;
   static Complex amplitude;
   private static Complex findAmplitude (
+    long noiseString,
     long outputQubitString,
     boolean print
   ) throws Exception {
 
     // long evidenceStart = System.nanoTime();
+    for (int noise=0; noise<noiseCount; noise++) {
+      int varForNoise = noiseRVToVar[noise];
+      // to adhere to Cirq's endian convention:
+      evidence.varCommit(varForNoise, ((int)(noiseString>>(noiseCount-noise-1)))&1);
+    }
     for (int qubit=0; qubit<qubitCount; qubit++) {
       int varForQubit = qubitFinalToVar[qubit];
       // to adhere to Cirq's endian convention:
@@ -155,11 +178,14 @@ public class Evaluator {
     // Finally, write the results to out file.
     if (print) {
       if ( amplitude.getImaginary()<0 ) {
-        csv.write(outputQubitString+","+amplitude.getReal()+""+amplitude.getImaginary()+"j"+","+evidenceDuration+","+evaluationDuration);
+        // csv.write(outputQubitString+","+amplitude.getReal()+""+amplitude.getImaginary()+"j"+","+evidenceDuration+","+evaluationDuration);
+        csv.write(noiseString+","+outputQubitString+","+amplitude.getReal()+""+amplitude.getImaginary()+"j"+","+evidenceDuration+","+evaluationDuration);
       } else if ( amplitude.getImaginary()==0 ) {
-        csv.write(outputQubitString+","+amplitude.getReal()+","+evidenceDuration+","+evaluationDuration);
+        // csv.write(outputQubitString+","+amplitude.getReal()+","+evidenceDuration+","+evaluationDuration);
+        csv.write(noiseString+","+outputQubitString+","+amplitude.getReal()+","+evidenceDuration+","+evaluationDuration);
       } else {
-        csv.write(outputQubitString+","+amplitude.getReal()+"+"+amplitude.getImaginary()+"j"+","+evidenceDuration+","+evaluationDuration);
+        // csv.write(outputQubitString+","+amplitude.getReal()+"+"+amplitude.getImaginary()+"j"+","+evidenceDuration+","+evaluationDuration);
+        csv.write(noiseString+","+outputQubitString+","+amplitude.getReal()+"+"+amplitude.getImaginary()+"j"+","+evidenceDuration+","+evaluationDuration);
       }
       csv.newLine();
     }
