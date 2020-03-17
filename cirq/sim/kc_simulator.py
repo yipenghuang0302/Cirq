@@ -21,7 +21,7 @@ from typing import Any, Dict, Iterator, List, Type, Sequence, Union
 import numbers, cmath, sympy
 import numpy as np
 
-from cirq import circuits, ops, protocols, schedules, study, optimizers, value, devices
+from cirq import circuits, ops, protocols, study, optimizers, value, devices
 from cirq.sim import simulator, wave_function, density_matrix_utils, wave_function_simulator, sparse_simulator, density_matrix_simulator
 
 import os, subprocess, re, csv, sys, time
@@ -210,13 +210,14 @@ potential ( {target_posterior} | '''
 
     def __init__(
         self,
-        program: Union[circuits.Circuit, schedules.Schedule],
+        program: circuits.Circuit,
         qubit_order: ops.QubitOrderOrList = ops.QubitOrder.DEFAULT,
         initial_state: Any = None,
         intermediate: bool = False, # whether or not moment steps, intermediate measurement allowed.
         dtype: Type[np.number] = np.complex64,
         noise: 'cirq.NOISE_MODEL_LIKE' = None,
-        seed: value.RANDOM_STATE_LIKE = None):
+        seed: value.RANDOM_STATE_LIKE = None,
+        ignore_measurement_results: bool = False):
         """A sparse matrix simulator.
 
         Args:
@@ -229,6 +230,7 @@ potential ( {target_posterior} | '''
         self._dtype = dtype
         self._prng = value.parse_random_state(seed)
         self._noise = devices.NoiseModel.from_noise_model_like(noise)
+        self._ignore_measurement_results = (ignore_measurement_results)
         self._intermediate = intermediate
 
         circuit = (program if isinstance(program, circuits.Circuit) else program.to_circuit())
@@ -256,6 +258,7 @@ potential ( {target_posterior} | '''
         net_file.write('net {}\n\n')
 
         # initial_state: Union[int, np.ndarray],
+        # We are only able to handle classical initial states
         # prevent later calls to simulator from changing the initial state, if already fixed
         self._initial_state_lockout = False if initial_state is None else True
         # generate Bayesian network nodes with no priors for qubit initialization
@@ -333,12 +336,16 @@ potential ( {target_posterior} | '''
                     print("protocols.mixture(op)")
                     print(protocols.mixture(op))
 
-                    rv_node_string = self.net_prelude_depolarize if len(protocols.mixture(op))==4 else self.net_prelude_boolean
+                    # rv_node_string = self.net_prelude_depolarize if len(protocols.mixture(op))==4 else self.net_prelude_boolean
+                    rv_node_string = self.net_prelude_depolarize
                     rv_node_string += self.net_interlude
                     rv_node_string += '( '
-                    for component in protocols.mixture(op):
-                        # rv_node_string += self._to_cpp_complex_hash(cmath.sqrt(component[0])) + ' '
-                        rv_node_string += self._to_cpp_complex_hash(component[0]) + ' '
+                    for index in range(4):
+                        if index<len(protocols.mixture(op)):
+                            component = protocols.mixture(op)[index]
+                            rv_node_string += self._to_cpp_complex_hash(cmath.sqrt(component[0])) + ' '
+                        else:
+                            rv_node_string += '0 '
                     rv_node_string += ')'
                     rv_node_string += self.net_postlude
 
@@ -355,38 +362,42 @@ potential ( {target_posterior} | '''
                     #
                     # transposed_cpts = self._unitary_to_transposed_cpt( op.gate, unitary_matrix )
                     #
-                    # for target_qubit, transposed_cpt in zip(reversed(op.qubits), reversed(transposed_cpts)):
+                    for target_qubit in reversed(op.qubits):
 
-                    node_string = self.net_prelude_qubit
-                    node_string += '{target_posterior}_rv '
-                    parents=[]
-                    for control_qubit in op.qubits:
-                        depth = str(qubit_to_last_moment_index[control_qubit]).zfill(4)
-                        parent = 'n' + depth + 'q' + str(control_qubit).zfill(4)
-                        node_string += parent + ' '
-                        parents.append(parent)
-                    node_string += self.net_interlude
-                    node_string += '( '
-                    for index, component in enumerate(protocols.mixture(op)):
-                        print("self._net_data_format(parents,0)")
-                        print(self._net_data_format(parents,0))
-                        print("component[1]")
-                        print(component[1])
-                        print("self._net_data_format(parents,0).format(data=component[1])")
-                        print(self._net_data_format(parents,0).format(data=component[1]))
-                        node_string += self._net_data_format(parents,0).format(data=self._cpt_to_cpp_complex_hash(component[1]))
-                        node_string += ' '
-                    node_string += ')'
-                    node_string += self.net_postlude
+                        node_string = self.net_prelude_qubit
+                        node_string += '{target_posterior}_rv '
+                        parents=[]
+                        for control_qubit in op.qubits:
+                            depth = str(qubit_to_last_moment_index[control_qubit]).zfill(4)
+                            parent = 'n' + depth + 'q' + str(control_qubit).zfill(4)
+                            node_string += parent + ' '
+                            parents.append(parent)
+                        node_string += self.net_interlude
+                        node_string += '( '
+                        for index in range(4):
+                            if index<len(protocols.mixture(op)):
+                                component = protocols.mixture(op)[index]
+                                node_string += self._net_data_format(parents,0).format(data=self._cpt_to_cpp_complex_hash(component[1]))
+                                node_string += ' '
+                            else:
+                                node_string += '((1 0)(0 1)) '
+                            # print("self._net_data_format(parents,0)")
+                            # print(self._net_data_format(parents,0))
+                            # print("component[1]")
+                            # print(component[1])
+                            # print("self._net_data_format(parents,0).format(data=component[1])")
+                            # print(self._net_data_format(parents,0).format(data=component[1]))
+                        node_string += ')'
+                        node_string += self.net_postlude
 
-                    target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(target_qubit).zfill(4)
-                    net_file.write(rv_node_string.format(
-                        target_posterior=target_posterior+'_rv',
-                        ))
-                    net_file.write(node_string.format(
-                        target_posterior=target_posterior,
-                        # data=self._cpt_to_cpp_complex_hash(transposed_cpt.transpose())
-                        ))
+                        target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(target_qubit).zfill(4)
+                        net_file.write(rv_node_string.format(
+                            target_posterior=target_posterior+'_rv',
+                            ))
+                        net_file.write(node_string.format(
+                            target_posterior=target_posterior,
+                            # data=self._cpt_to_cpp_complex_hash(transposed_cpt.transpose())
+                            ))
 
                     # update depth
                     # for target_qubit, transposed_cpt in zip(reversed(op.qubits), reversed(transposed_cpts)):
@@ -515,14 +526,30 @@ potential ( {target_posterior} | '''
         repetitions: int) -> Dict[str, List[np.ndarray]]:
         """See definition in `cirq.SimulatesSamples`."""
         param_resolver = param_resolver or study.ParamResolver({})
+
+        measurements = {}  # type: Dict[str, List[np.ndarray]]
+        if repetitions == 0:
+            for _, op, _ in circuit.findall_operations_with_gate_type(
+                    ops.MeasurementGate):
+                measurements[protocols.measurement_key(op)] = np.empty([0, 1])
+            return {k: np.array(v) for k, v in measurements.items()}
+
         def measure_or_mixture(op):
             return protocols.is_measurement(op) or protocols.has_mixture(op)
+
         if circuit.are_all_matches_terminal(measure_or_mixture):
             return self._run_sweep_sample(circuit, param_resolver, repetitions)
         else:
             if not self._intermediate:
                 raise Exception(f'KnowledgeCompilationSimulator not properly configured for intermediate state simulation.')
-            return self._run_sweep_repeat(param_resolver, repetitions)
+            return self._run_sweep_repeat(circuit, param_resolver, repetitions)
+
+        # if circuit.are_all_measurements_terminal():
+        #     return self._run_sweep_sample(circuit, param_resolver, repetitions)
+        # else:
+        #     if not self._intermediate:
+        #         raise Exception(f'KnowledgeCompilationSimulator not properly configured for intermediate state simulation.')
+        #     return self._run_sweep_repeat(circuit, param_resolver, repetitions)
 
     def _run_sweep_sample(
         self,
@@ -535,13 +562,11 @@ potential ( {target_posterior} | '''
         self._repetitions = repetitions
         self._subprocess.stdin.write(f'cc$R${self._repetitions}\n'.encode())
 
-        all_step_results = self._base_iterator(
+        for step_result in self._base_iterator(
                 param_resolver=param_resolver,
-                initial_state=0)
-
-        for step_result in all_step_results:
+                initial_state=0):
             pass
-        return step_result.measurements
+        return {k: np.array(v) for k, v in step_result.measurements.items()}
 
         # for step_result in self._base_iterator(
         #         param_resolver=param_resolver,
@@ -558,6 +583,7 @@ potential ( {target_posterior} | '''
 
     def _run_sweep_repeat(
         self,
+        circuit: circuits.Circuit,
         param_resolver: study.ParamResolver,
         repetitions: int) -> Dict[str, List[np.ndarray]]:
 
@@ -579,7 +605,7 @@ potential ( {target_posterior} | '''
 
     def compute_amplitudes_sweep(
             self,
-            program: Union[circuits.Circuit, schedules.Schedule],
+            program: 'cirq.Circuit',
             bitstrings: Sequence[int],
             params: study.Sweepable,
             qubit_order: ops.QubitOrderOrList = ops.QubitOrder.DEFAULT,
@@ -595,7 +621,7 @@ potential ( {target_posterior} | '''
 
     def simulate_sweep(
         self,
-        program: Union[circuits.Circuit, schedules.Schedule],
+        program: 'cirq.Circuit',
         params: study.Sweepable,
         qubit_order: ops.QubitOrderOrList = ops.QubitOrder.DEFAULT,
         initial_state: Any = None,
@@ -662,20 +688,20 @@ potential ( {target_posterior} | '''
         print(param_resolver)
 
         if len(self._circuit) == 0:
-            # yield sparse_simulator.SparseSimulatorStep(
-            #     wave_function.to_valid_state_vector(initial_state,self._num_qubits,dtype=self._dtype),
-            #     {},
-            #     self._qubit_map,
-            #     self._dtype)
-            yield density_matrix_simulator.DensityMatrixStepResult(
-                density_matrix=density_matrix_utils.to_valid_density_matrix(
-                    initial_state,
-                    self._num_qubits,
-                    qid_shape=protocols.qid_shape(self._qubits),
-                    dtype=self._dtype),
-                measurements={},
-                qubit_map=self._qubit_map,
-                dtype=self._dtype)
+            yield sparse_simulator.SparseSimulatorStep(
+                wave_function.to_valid_state_vector(initial_state,self._num_qubits,dtype=self._dtype),
+                {},
+                self._qubit_map,
+                self._dtype)
+            # yield density_matrix_simulator.DensityMatrixStepResult(
+            #     density_matrix=density_matrix_utils.to_valid_density_matrix(
+            #         initial_state,
+            #         self._num_qubits,
+            #         qid_shape=protocols.qid_shape(self._qubits),
+            #         dtype=self._dtype),
+            #     measurements={},
+            #     qubit_map=self._qubit_map,
+            #     dtype=self._dtype)
 
         else:
 
@@ -740,7 +766,7 @@ potential ( {target_posterior} | '''
                             self._subprocess.stdin.write(line.encode())
 
                     measurements = collections.defaultdict(
-                            list)  # type: Dict[str, List[bool]]
+                        list)  # type: Dict[str, List[int]]
 
                     # print("lmap time = ")
                     # print(time.time() - lmap_start)
@@ -772,25 +798,30 @@ potential ( {target_posterior} | '''
                                 for op in moment:
                                     indices = [self._qubit_map[qubit] for qubit in op.qubits]
                                     if protocols.is_measurement(op):
-                                        meas = ops.op_gate_of_type(op, ops.MeasurementGate)
-                                        if meas:
+                                        if isinstance(op.gate, ops.MeasurementGate):
+                                            meas = op.gate
                                             invert_mask = meas.full_invert_mask()
+                                            # Measure updates inline.
                                             bits = [bin_list[index] for index in indices]
-                                            corrected = [bit ^ mask for bit, mask in zip(bits, invert_mask)]
+                                            corrected = [
+                                                bit ^ (bit < 2 and mask)
+                                                for bit, mask in zip(bits, invert_mask)
+                                            ]
                                             key = protocols.measurement_key(meas)
                                             measurements[key].append(corrected)
                         else:
-                            for noiseString in range(1<<self._num_noise):
+                            for noiseString in range(1<<2*self._num_noise):
+                                print("noiseString")
+                                print(noiseString)
                                 state_vector = []
                                 for outputQubitString in range(1<<self._num_qubits):
                                     if hasattr(self, '_amplitude_indices'):
                                         if outputQubitString in self._amplitude_indices:
                                             line = csv_file.readline()
                                             row = line.split(',')
-                                            # print (row)
-                                            # print (row[0])
-                                            assert int(row[0]) == outputQubitString
-                                            state_vector.append(complex(row[1]))
+                                            print (row)
+                                            assert int(row[1]) == outputQubitString
+                                            state_vector.append(complex(row[2]))
                                         else:
                                             state_vector.append(0)
                                     else:
@@ -800,7 +831,11 @@ potential ( {target_posterior} | '''
                                         print (row[0])
                                         assert int(row[1]) == outputQubitString
                                         state_vector.append(complex(row[2]))
+                                        print("state_vector")
+                                        print(state_vector)
                                 state_vectors.append(state_vector)
+                                print("state_vectors")
+                                print(state_vectors)
                     # assert float(row[2])-1.0 < 1.0/256.0
                     os.remove(csv_name)
 
@@ -808,6 +843,8 @@ potential ( {target_posterior} | '''
                     for state_vector in state_vectors:
                         print (np.outer(state_vector,np.conj(state_vector)))
                         density_matrix += np.outer(state_vector,np.conj(state_vector))
+                        print("density_matrix")
+                        print(density_matrix)
 
                     if not hasattr(self, '_repetitions'):
                         print("HERE3")
@@ -818,15 +855,14 @@ potential ( {target_posterior} | '''
                                 # operate as measurements.
                                 # TODO: support measurement outside the computational basis.
                                 if perform_measurements:
-                                    # self._simulate_measurement(op, np.reshape(state_vector, (2,) * self._num_qubits), indices,
-                                    #                            measurements, self._num_qubits)
-                                    meas = ops.op_gate_of_type(op, ops.MeasurementGate)
-                                    if meas:
+                                    if isinstance(op.gate, ops.MeasurementGate):
+                                        meas = op.gate
                                         invert_mask = meas.full_invert_mask()
                                         # Measure updates inline.
                                         bits, _ = density_matrix_utils.measure_density_matrix(
                                             density_matrix,
-                                            indices)
+                                            indices,
+                                            seed=self._prng)
                                         corrected = [
                                             bit ^ (bit < 2 and mask)
                                             for bit, mask in zip(bits, invert_mask)
@@ -837,44 +873,23 @@ potential ( {target_posterior} | '''
                     # print("post time = ")
                     # print(time.time() - post_start)
 
-                    # yield sparse_simulator.SparseSimulatorStep(
-                    #     state_vector=state_vector,
-                    #     measurements=measurements,
-                    #     qubit_map=self._qubit_map,
-                    #     dtype=self._dtype)
-                    # sparse_simulator_step = sparse_simulator.SparseSimulatorStep(
-                    #     state_vector=state_vector,
-                    #     measurements=measurements,
-                    #     qubit_map=self._qubit_map,
-                    #     dtype=self._dtype)
-                    yield density_matrix_simulator.DensityMatrixStepResult(
-                        density_matrix=density_matrix,
+                    yield sparse_simulator.SparseSimulatorStep(
+                        state_vector=state_vector,
                         measurements=measurements,
                         qubit_map=self._qubit_map,
                         dtype=self._dtype)
+                    # yield density_matrix_simulator.DensityMatrixStepResult(
+                    #     density_matrix=density_matrix,
+                    #     measurements=measurements,
+                    #     qubit_map=self._qubit_map,
+                    #     dtype=self._dtype)
 
-    # def _simulate_measurement(self, op: ops.Operation, data,
-    #         indices: List[int], measurements: Dict[str, List[bool]],
-    #         num_qubits: int) -> None:
-    #     """Simulate an op that is a measurement in the computataional basis."""
-    #     meas = ops.op_gate_of_type(op, ops.MeasurementGate)
-    #     # TODO: support measurement outside computational basis.
-    #     if meas:
-    #         invert_mask = meas.full_invert_mask()
-    #         # Measure updates inline.
-    #         bits, _ = wave_function.measure_state_vector(data,
-    #                                                      indices,
-    #                                                      seed=self._prng)
-    #         corrected = [bit ^ mask for bit, mask in zip(bits, invert_mask)]
-    #         key = protocols.measurement_key(meas)
-    #         measurements[key].extend(corrected)
-
-    def _create_simulator_trial_result(self,
-            params: study.ParamResolver,
-            measurements: Dict[str, np.ndarray],
-            final_simulator_state: 'DensityMatrixSimulatorState') \
-            -> 'DensityMatrixTrialResult':
-        return density_matrix_simulator.DensityMatrixTrialResult(
-            params=params,
-            measurements=measurements,
-            final_simulator_state=final_simulator_state)
+    # def _create_simulator_trial_result(self,
+    #         params: study.ParamResolver,
+    #         measurements: Dict[str, np.ndarray],
+    #         final_simulator_state: 'DensityMatrixSimulatorState') \
+    #         -> 'DensityMatrixTrialResult':
+    #     return density_matrix_simulator.DensityMatrixTrialResult(
+    #         params=params,
+    #         measurements=measurements,
+    #         final_simulator_state=final_simulator_state)

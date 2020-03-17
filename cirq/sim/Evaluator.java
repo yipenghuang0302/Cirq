@@ -116,7 +116,7 @@ public class Evaluator {
             Complex amplitude = findAmplitude(0, outputQubitString, true); // TODO: enable noise
           }
         } else {
-          for (long noiseString=0; noiseString<1L<<noiseCount; noiseString++) {
+          for (long noiseString=0; noiseString<1L<<2*noiseCount; noiseString++) {
             double probabilitySum = 0.0;
             for (long outputQubitString=0; outputQubitString<1L<<qubitCount; outputQubitString++) {
               Complex amplitude = findAmplitude(noiseString, outputQubitString, true);
@@ -145,12 +145,11 @@ public class Evaluator {
     long outputQubitString,
     boolean print
   ) throws Exception {
-
     // long evidenceStart = System.nanoTime();
     for (int noise=0; noise<noiseCount; noise++) {
       int varForNoise = noiseRVToVar[noise];
       // to adhere to Cirq's endian convention:
-      evidence.varCommit(varForNoise, ((int)(noiseString>>(noiseCount-noise-1)))&1);
+      evidence.varCommit(varForNoise, ((int)(noiseString>>2*(noiseCount-noise-1)))&3);
     }
     for (int qubit=0; qubit<qubitCount; qubit++) {
       int varForQubit = qubitFinalToVar[qubit];

@@ -97,6 +97,22 @@ def test_run_bit_flips(dtype):
                                     {'0': [[b0]], '1': [[b1]]})
 
 
+@pytest.mark.parametrize('dtype', [np.complex64, np.complex128])
+def test_run_bit_flips_with_dephasing(dtype):
+    q0, q1 = cirq.LineQubit.range(2)
+    for b0 in [0, 1]:
+        for b1 in [0, 1]:
+            circuit = cirq.Circuit((cirq.X**b0)(q0), (cirq.X**b1)(q1),
+                                   cirq.measure(q0), cirq.measure(q1))
+            simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype,
+                                                ignore_measurement_results=True)
+            result = simulator.run(circuit)
+            np.testing.assert_equal(result.measurements, {
+                '0': [[b0]],
+                '1': [[b1]]
+            })
+
+
 # @pytest.mark.parametrize('dtype', [np.complex64, np.complex128])
 # def test_run_qudit_increments(dtype):
 #     q0, q1 = cirq.LineQid.for_qid_shape((3, 4))
@@ -215,6 +231,26 @@ def test_run_channel(dtype):
 
 
 @pytest.mark.parametrize('dtype', [np.complex64, np.complex128])
+def test_run_measure_at_end_no_repetitions(dtype):
+    q0, q1 = cirq.LineQubit.range(2)
+    for b0 in [0, 1]:
+        for b1 in [0, 1]:
+            circuit = cirq.Circuit((cirq.X**b0)(q0), (cirq.X**b1)(q1),
+                                   cirq.measure(q0), cirq.measure(q1))
+            simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=np.complex64)
+            with mock.patch.object(simulator,
+                                   '_base_iterator',
+                                   wraps=simulator._base_iterator) as mock_sim:
+                result = simulator.run(circuit, repetitions=0)
+                np.testing.assert_equal(result.measurements, {
+                    '0': np.empty([0, 1]),
+                    '1': np.empty([0, 1])
+                })
+                assert result.repetitions == 0
+                assert mock_sim.call_count == 0
+
+
+@pytest.mark.parametrize('dtype', [np.complex64, np.complex128])
 def test_run_repetitions_measure_at_end(dtype):
     q0, q1 = cirq.LineQubit.range(2)
     for b0 in [0, 1]:
@@ -250,6 +286,27 @@ def test_run_repetitions_measure_at_end(dtype):
 #                 })
 #                 assert result.repetitions == 3
 #                 assert mock_sim.call_count == 1
+
+
+@pytest.mark.parametrize('dtype', [np.complex64, np.complex128])
+def test_run_measurement_not_terminal_no_repetitions(dtype):
+    q0, q1 = cirq.LineQubit.range(2)
+    for b0 in [0, 1]:
+        for b1 in [0, 1]:
+            circuit = cirq.Circuit((cirq.X**b0)(q0), (cirq.X**b1)(q1),
+                                   cirq.measure(q0), cirq.measure(q1),
+                                   cirq.H(q0), cirq.H(q1))
+            simulator = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, dtype=np.complex64)
+            with mock.patch.object(simulator,
+                                   '_base_iterator',
+                                   wraps=simulator._base_iterator) as mock_sim:
+                result = simulator.run(circuit, repetitions=0)
+                np.testing.assert_equal(result.measurements, {
+                    '0': np.empty([0, 1]),
+                    '1': np.empty([0, 1])
+                })
+                assert result.repetitions == 0
+                assert mock_sim.call_count == 0
 
 
 @pytest.mark.parametrize('dtype', [np.complex64, np.complex128])
@@ -808,9 +865,56 @@ def test_density_matrix_trial_result_repr():
                 "qubit_map={cirq.LineQubit(0): 0}))""")
 
 
+class XAsOp(cirq.Operation):
+
+    def __init__(self, q):
+        # coverage: ignore
+        self.q = q
+
+    @property
+    def qubits(self):
+        # coverage: ignore
+        return self.q,
+
+    def with_qubits(self, *new_qubits):
+        # coverage: ignore
+        return XAsOp(new_qubits[0])
+
+    def _channel_(self):
+        # coverage: ignore
+        return cirq.channel(cirq.X)
+
+
 def test_works_on_operation():
 
     class XAsOp(cirq.Operation):
+
+        def __init__(self, q):
+            # coverage: ignore
+            self.q = q
+
+        @property
+        def qubits(self):
+            # coverage: ignore
+            return self.q,
+
+        def with_qubits(self, *new_qubits):
+            raise NotImplementedError()
+
+        def _channel_(self):
+            # coverage: ignore
+            return cirq.channel(cirq.X)
+
+    c = cirq.Circuit(XAsOp(cirq.LineQubit(0)))
+    s = cirq.KnowledgeCompilationSimulator(c)
+    np.testing.assert_allclose(s.simulate(c).final_density_matrix,
+                               np.diag([0, 1]),
+                               atol=1e-8)
+
+
+def test_works_on_operation_dephased():
+
+    class HAsOp(cirq.Operation):
 
         def __init__(self, q):
             self.q = q
@@ -820,16 +924,15 @@ def test_works_on_operation():
             return self.q,
 
         def with_qubits(self, *new_qubits):
-            # coverage: ignore
-            return XAsOp(new_qubits[0])
+            raise NotImplementedError()
 
         def _channel_(self):
-            return cirq.channel(cirq.X)
+            return cirq.channel(cirq.H)
 
-    c = cirq.Circuit(XAsOp(cirq.LineQubit(0)))
-    s = cirq.KnowledgeCompilationSimulator(c)
+    c = cirq.Circuit(HAsOp(cirq.LineQubit(0)))
+    s = cirq.KnowledgeCompilationSimulator(c, ignore_measurement_results=True)
     np.testing.assert_allclose(s.simulate(c).final_density_matrix,
-                               np.diag([0, 1]),
+                               [[0.5 + 0.j, 0.5 + 0.j], [0.5 + 0.j, 0.5 + 0.j]],
                                atol=1e-8)
 
 
@@ -926,8 +1029,8 @@ def test_random_seed_does_not_modify_global_state_non_terminal_measurements():
     # a = cirq.NamedQubit('a')
     a = cirq.LineQubit(0)
     circuit = cirq.Circuit(
-        cirq.X(a)**0.5, cirq.measure(a),
-        cirq.X(a)**0.5, cirq.measure(a))
+        cirq.X(a)**0.5, cirq.measure(a, key='a0'),
+        cirq.X(a)**0.5, cirq.measure(a, key='a1'))
 
     sim = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, seed=1234)
     result1 = sim.run(circuit, repetitions=50)
@@ -1004,3 +1107,16 @@ def test_random_seed_non_terminal_measurements_deterministic():
 #     )
 #     assert np.all(cirq.KnowledgeCompilationSimulator(c).run(c).measurements['a'] ==
 #                   [[0, 1, 0, 2, 3]])
+
+
+def test_simulate_noise_with_terminal_measurements():
+    q = cirq.LineQubit(0)
+    circuit1 = cirq.Circuit(cirq.measure(q))
+    circuit2 = circuit1 + cirq.I(q)
+
+    simulator1 = cirq.KnowledgeCompilationSimulator(circuit1, noise=cirq.X)
+    result1 = simulator1.run(circuit1, repetitions=10)
+    simulator2 = cirq.KnowledgeCompilationSimulator(circuit2, intermediate=True, noise=cirq.X)
+    result2 = simulator2.run(circuit2, repetitions=10)
+
+    assert result1 == result2
