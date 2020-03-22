@@ -148,16 +148,16 @@ class KnowledgeCompilationSimulator(simulator.SimulatesSamples,
 }}
 potential ( {target_posterior} | '''
 
-    net_prelude_boolean = \
-'''node {target_posterior} {{
-    states = ("0" "1");
-    subtype = boolean;
-}}
-potential ( {target_posterior} | '''
+#     net_prelude_boolean = \
+# '''node {target_posterior} {{
+#     states = ("0" "1");
+#     subtype = boolean;
+# }}
+# potential ( {target_posterior} | '''
 
-    net_prelude_depolarize = \
+    net_prelude_noise = \
 '''node {target_posterior} {{
-    states = ("I" "X" "Y" "Z");
+    states = ("M_0" "M_1" "M_2" "M_3");
     subtype = depolarize;
 }}
 potential ( {target_posterior} | '''
@@ -263,6 +263,7 @@ potential ( {target_posterior} | '''
         self._initial_state_lockout = False if initial_state is None else True
         # generate Bayesian network nodes with no priors for qubit initialization
         qubit_to_last_moment_index = {}
+        # noisy_moments = set()
         actual_initial_state = 0 if initial_state is None else initial_state
         for target_qubit, initial_value in zip (
             self._qubits,
@@ -294,50 +295,82 @@ potential ( {target_posterior} | '''
         for moment_index, moment in enumerate(circuit, start=1):
             for op in moment:
 
-                print ("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-                print ("op")
-                print (op)
-                print ("repr(op)")
-                print (repr(op))
+                # print ("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                # print ("op")
+                # print (op)
+                # print ("repr(op)")
+                # print (repr(op))
+                # print ("op.gate")
+                # print (op.gate)
+                # print ("repr(op.gate)")
+                # print (repr(op.gate))
 
-                if protocols.has_unitary(op):
+                if isinstance (op.gate,ops.PhaseDampingChannel):
+                    self._num_noise += 1
 
-                    unitary_matrix = protocols.unitary(op)
-                    print ("unitary_matrix")
-                    print (unitary_matrix)
-                    transposed_cpts = self._unitary_to_transposed_cpt( op.gate, unitary_matrix )
+                    rv_node_string = self.net_prelude_noise + self.net_interlude
+                    rv_node_string += '( ' + self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)) + ' ' + self._to_cpp_complex_hash(cmath.sqrt(op.gate.gamma)) + ' 0 0 )'
+                    rv_node_string += self.net_postlude
 
-                    for target_qubit, transposed_cpt in zip(reversed(op.qubits), reversed(transposed_cpts)):
+                    qubit = op.qubits[0]
 
-                        node_string = self.net_prelude_qubit
+                    node_string = self.net_prelude_qubit
+                    node_string += '{target_posterior}_rv '
+                    depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
+                    parent = 'n' + depth + 'q' + str(qubit).zfill(4)
+                    node_string += parent + ' '
+                    node_string += self.net_interlude
+                    node_string += '( '
+                    node_string += '((1 0)(0 1)) ((1 0)(0 -1)) ((1 0)(0 1)) ((1 0)(0 1)) '
+                    node_string += ')'
+                    node_string += self.net_postlude
 
-                        parents=[]
-                        for control_qubit in op.qubits:
-                            depth = str(qubit_to_last_moment_index[control_qubit]).zfill(4)
-                            parent = 'n' + depth + 'q' + str(control_qubit).zfill(4)
-                            node_string += parent + ' '
-                            parents.append(parent)
-                        node_string += self.net_interlude
-                        node_string += self._net_data_format ( parents, 0 )
-                        node_string += self.net_postlude
+                    target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
+                    net_file.write(rv_node_string.format(
+                        target_posterior=target_posterior+'_rv',
+                        ))
+                    net_file.write(node_string.format(
+                        target_posterior=target_posterior,
+                        ))
 
-                        target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(target_qubit).zfill(4)
-                        net_file.write(node_string.format(
-                            target_posterior=target_posterior,
-                            data=self._cpt_to_cpp_complex_hash(transposed_cpt.transpose())
-                            ))
+                    qubit_to_last_moment_index[qubit] = moment_index
+                    # noisy_moments.add(moment_index)
 
-                    # update depth
-                    for target_qubit, transposed_cpt in zip(reversed(op.qubits), reversed(transposed_cpts)):
-                        qubit_to_last_moment_index[target_qubit] = moment_index
+                elif isinstance (op.gate,ops.AmplitudeDampingChannel):
+                    self._num_noise += 1
+
+                    rv_node_string = self.net_prelude_noise + self.net_interlude
+                    rv_node_string += '( ' + self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)) + ' ' + self._to_cpp_complex_hash(cmath.sqrt(op.gate.gamma)) + ' 0 0 )'
+                    rv_node_string += self.net_postlude
+
+                    qubit = op.qubits[0]
+
+                    node_string = self.net_prelude_qubit
+                    node_string += '{target_posterior}_rv '
+                    depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
+                    parent = 'n' + depth + 'q' + str(qubit).zfill(4)
+                    node_string += parent + ' '
+                    node_string += self.net_interlude
+                    node_string += '( '
+                    node_string += '((1 0)(0 1)) ((1 0)(1 0)) ((1 0)(0 1)) ((1 0)(0 1)) '
+                    node_string += ')'
+                    node_string += self.net_postlude
+
+                    target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
+                    net_file.write(rv_node_string.format(
+                        target_posterior=target_posterior+'_rv',
+                        ))
+                    net_file.write(node_string.format(
+                        target_posterior=target_posterior,
+                        ))
+
+                    qubit_to_last_moment_index[qubit] = moment_index
+                    # noisy_moments.add(moment_index)
 
                 elif protocols.has_mixture(op):
                     self._num_noise += 1
-                    print("protocols.mixture(op)")
-                    print(protocols.mixture(op))
 
-                    # rv_node_string = self.net_prelude_depolarize if len(protocols.mixture(op))==4 else self.net_prelude_boolean
-                    rv_node_string = self.net_prelude_depolarize
+                    rv_node_string = self.net_prelude_noise
                     rv_node_string += self.net_interlude
                     rv_node_string += '( '
                     for index in range(4):
@@ -349,82 +382,53 @@ potential ( {target_posterior} | '''
                     rv_node_string += ')'
                     rv_node_string += self.net_postlude
 
-                    # stencil = [ [[1,0],[0,0]], [[0,0],[0,1]] ]
-                    # unitary_matrix = np.zeros((4,4),dtype=complex)
-                    # for index, component in enumerate(protocols.mixture(op)):
-                    #     # print("stencil[index]")
-                    #     # print(stencil[index])
-                    #     # print("component")
-                    #     # print(component)
-                    #     # print("np.kron( stencil[index], component[1] )")
-                    #     # print(np.kron( stencil[index], component[1] ))
-                    #     unitary_matrix += np.kron( stencil[index], component[1] )
-                    #
-                    # transposed_cpts = self._unitary_to_transposed_cpt( op.gate, unitary_matrix )
-                    #
-                    for target_qubit in reversed(op.qubits):
+                    qubit = op.qubits[0]
 
-                        node_string = self.net_prelude_qubit
-                        node_string += '{target_posterior}_rv '
-                        parents=[]
-                        for control_qubit in op.qubits:
-                            depth = str(qubit_to_last_moment_index[control_qubit]).zfill(4)
-                            parent = 'n' + depth + 'q' + str(control_qubit).zfill(4)
-                            node_string += parent + ' '
-                            parents.append(parent)
-                        node_string += self.net_interlude
-                        node_string += '( '
-                        for index in range(4):
-                            if index<len(protocols.mixture(op)):
-                                component = protocols.mixture(op)[index]
-                                node_string += self._net_data_format(parents,0).format(data=self._cpt_to_cpp_complex_hash(component[1]))
-                                node_string += ' '
-                            else:
-                                node_string += '((1 0)(0 1)) '
-                            # print("self._net_data_format(parents,0)")
-                            # print(self._net_data_format(parents,0))
-                            # print("component[1]")
-                            # print(component[1])
-                            # print("self._net_data_format(parents,0).format(data=component[1])")
-                            # print(self._net_data_format(parents,0).format(data=component[1]))
-                        node_string += ')'
-                        node_string += self.net_postlude
+                    node_string = self.net_prelude_qubit
+                    node_string += '{target_posterior}_rv '
+                    parents=[]
+                    depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
+                    parent = 'n' + depth + 'q' + str(qubit).zfill(4)
+                    node_string += parent + ' '
+                    parents.append(parent)
+                    node_string += self.net_interlude
+                    node_string += '( '
+                    for index in range(4):
+                        if index<len(protocols.mixture(op)):
+                            component = protocols.mixture(op)[index]
+                            node_string += self._net_data_format(parents,0).format(data=self._cpt_to_cpp_complex_hash(component[1]))
+                            node_string += ' '
+                        else:
+                            node_string += '((1 0)(0 1)) '
+                    node_string += ')'
+                    node_string += self.net_postlude
 
-                        target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(target_qubit).zfill(4)
-                        net_file.write(rv_node_string.format(
-                            target_posterior=target_posterior+'_rv',
-                            ))
-                        net_file.write(node_string.format(
-                            target_posterior=target_posterior,
-                            # data=self._cpt_to_cpp_complex_hash(transposed_cpt.transpose())
-                            ))
+                    target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
+                    net_file.write(rv_node_string.format(
+                        target_posterior=target_posterior+'_rv',
+                        ))
+                    net_file.write(node_string.format(
+                        target_posterior=target_posterior,
+                        ))
 
-                    # update depth
-                    # for target_qubit, transposed_cpt in zip(reversed(op.qubits), reversed(transposed_cpts)):
-                    #     qubit_to_last_moment_index[target_qubit] = moment_index
-                    for target_qubit in reversed(op.qubits):
-                        qubit_to_last_moment_index[target_qubit] = moment_index
+                    qubit_to_last_moment_index[qubit] = moment_index
+                    # noisy_moments.add(moment_index)
 
-                elif isinstance(op,(ops.PauliString, ops.PauliStringPhasor)) or \
-                not isinstance(op.gate,ops.MeasurementGate):
-
-                    if isinstance(op,(ops.PauliString,ops.PauliStringPhasor)):
-                        gate = None
-                    else:
-                        gate = op.gate
+                elif not isinstance(op.gate,ops.MeasurementGate):
 
                     if protocols.has_unitary(op):
                         unitary_matrix = protocols.unitary(op)
-                    elif protocols.has_mixture(op):
-                        unitary_matrix = [[0+0j,0+0j],[0+0j,0+0j]]
-                        for component in protocols.mixture(op):
-                            unitary_matrix += component[0] * component[1]
                     else: # protocols.has_channel(op)
+                        # print("HERE4")
                         unitary_matrix = [[0+0j,0+0j],[0+0j,0+0j]]
                         for component in protocols.channel(op):
+                            # print ("component")
+                            # print (component)
                             unitary_matrix += component
+                            # print ("unitary_matrix")
+                            # print (unitary_matrix)
 
-                    transposed_cpts = self._unitary_to_transposed_cpt( gate, unitary_matrix )
+                    transposed_cpts = self._unitary_to_transposed_cpt( op.gate, unitary_matrix )
 
                     for target_qubit, transposed_cpt in zip(reversed(op.qubits), reversed(transposed_cpts)):
 
@@ -455,11 +459,11 @@ potential ( {target_posterior} | '''
         # Bayesian network to conjunctive normal form
         # TODO: autoinstall this
         if not self._intermediate:
-            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -i circuit.net -w -s')
+            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -e -d -a -b -i circuit.net -w -s')
             # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e: Equal probabilities are encoded is incompatible with dtbnorders
         else:
-            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -e -d -a -i circuit.net -w -s')
+            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -b -i circuit.net -w -s')
             # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e and -b used together causes moment steps simulation to fail
         print (stdout)
@@ -493,10 +497,10 @@ potential ( {target_posterior} | '''
             for _ in range(1):
                 stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -simplify_s -in circuit.net.cnf -visualize')
                 if not self._intermediate:
-                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -exist variables.file -reduce -in circuit.net.cnf_simplified -suppress_ane -visualize')
+                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -exist variables.file -reduce -in circuit.net.cnf_simplified -visualize')
                     # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -exist variables.file -reduce -in circuit.net.cnf_simplified -minimize -suppress_ane -determined circuit.net.pmap')
                 else:
-                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -reduce -in circuit.net.cnf_simplified -suppress_ane -visualize')
+                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -reduce -in circuit.net.cnf_simplified -visualize')
                 # stdout = os.system('/n/fs/qdb/qACE/miniC2D-1.0.0/bin/linux/miniC2D -c circuit.net.cnf_simplified')
                 print (stdout)
                 currFileSize = os.path.getsize('circuit.net.cnf_simplified.nnf')
@@ -688,20 +692,20 @@ potential ( {target_posterior} | '''
         print(param_resolver)
 
         if len(self._circuit) == 0:
-            yield sparse_simulator.SparseSimulatorStep(
-                wave_function.to_valid_state_vector(initial_state,self._num_qubits,dtype=self._dtype),
-                {},
-                self._qubit_map,
-                self._dtype)
-            # yield density_matrix_simulator.DensityMatrixStepResult(
-            #     density_matrix=density_matrix_utils.to_valid_density_matrix(
-            #         initial_state,
-            #         self._num_qubits,
-            #         qid_shape=protocols.qid_shape(self._qubits),
-            #         dtype=self._dtype),
-            #     measurements={},
-            #     qubit_map=self._qubit_map,
-            #     dtype=self._dtype)
+            # yield sparse_simulator.SparseSimulatorStep(
+            #     wave_function.to_valid_state_vector(initial_state,self._num_qubits,dtype=self._dtype),
+            #     {},
+            #     self._qubit_map,
+            #     self._dtype)
+            yield density_matrix_simulator.DensityMatrixStepResult(
+                density_matrix=density_matrix_utils.to_valid_density_matrix(
+                    initial_state,
+                    self._num_qubits,
+                    qid_shape=protocols.qid_shape(self._qubits),
+                    dtype=self._dtype),
+                measurements={},
+                qubit_map=self._qubit_map,
+                dtype=self._dtype)
 
         else:
 
@@ -873,23 +877,23 @@ potential ( {target_posterior} | '''
                     # print("post time = ")
                     # print(time.time() - post_start)
 
-                    yield sparse_simulator.SparseSimulatorStep(
-                        state_vector=state_vector,
-                        measurements=measurements,
-                        qubit_map=self._qubit_map,
-                        dtype=self._dtype)
-                    # yield density_matrix_simulator.DensityMatrixStepResult(
-                    #     density_matrix=density_matrix,
+                    # yield sparse_simulator.SparseSimulatorStep(
+                    #     state_vector=state_vector,
                     #     measurements=measurements,
                     #     qubit_map=self._qubit_map,
                     #     dtype=self._dtype)
+                    yield density_matrix_simulator.DensityMatrixStepResult(
+                        density_matrix=density_matrix,
+                        measurements=measurements,
+                        qubit_map=self._qubit_map,
+                        dtype=self._dtype)
 
-    # def _create_simulator_trial_result(self,
-    #         params: study.ParamResolver,
-    #         measurements: Dict[str, np.ndarray],
-    #         final_simulator_state: 'DensityMatrixSimulatorState') \
-    #         -> 'DensityMatrixTrialResult':
-    #     return density_matrix_simulator.DensityMatrixTrialResult(
-    #         params=params,
-    #         measurements=measurements,
-    #         final_simulator_state=final_simulator_state)
+    def _create_simulator_trial_result(self,
+            params: study.ParamResolver,
+            measurements: Dict[str, np.ndarray],
+            final_simulator_state: 'DensityMatrixSimulatorState') \
+            -> 'DensityMatrixTrialResult':
+        return density_matrix_simulator.DensityMatrixTrialResult(
+            params=params,
+            measurements=measurements,
+            final_simulator_state=final_simulator_state)
