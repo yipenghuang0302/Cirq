@@ -236,14 +236,14 @@ potential ( {target_posterior} | '''
         circuit = (program if isinstance(program, circuits.Circuit) else program.to_circuit())
         circuit = circuits.Circuit(self._noise.noisy_moments(circuit, sorted(circuit.all_qubits())))
 
-        for _ in range(0):
+        for _ in range(1):
             if not self._intermediate: # messes up moment steps, moment step samping
-                optimizers.ExpandComposite().optimize_circuit(circuit)
+                # optimizers.ExpandComposite().optimize_circuit(circuit)
                 # optimizers.ConvertToCzAndSingleGates().optimize_circuit(circuit) # cannot work with params
                 # optimizers.MergeInteractions().optimize_circuit(circuit)
                 optimizers.MergeSingleQubitGates().optimize_circuit(circuit)
-                optimizers.DropEmptyMoments().optimize_circuit(circuit)
-                optimizers.EjectPhasedPaulis().optimize_circuit(circuit)
+                # optimizers.DropEmptyMoments().optimize_circuit(circuit)
+                # optimizers.EjectPhasedPaulis().optimize_circuit(circuit)
                 pass
             optimizers.EjectZ().optimize_circuit(circuit)
             # optimizers.DropNegligible().optimize_circuit(circuit)
@@ -466,7 +466,7 @@ potential ( {target_posterior} | '''
             stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -b -i circuit.net -w -s')
             # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e and -b used together causes moment steps simulation to fail
-        print (stdout)
+        # print (stdout)
 
         self._node_re_compile = re.compile(r'cc\$I\$(\d+)\$1.0\$\+\$n(\d+)q(\d+)\$') # are negative literals and opt bool valid?
         self._int_re_compile = re.compile(r'cc\$C\$\d+\$(\d+)')
@@ -502,7 +502,7 @@ potential ( {target_posterior} | '''
                 else:
                     stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -reduce -in circuit.net.cnf_simplified -visualize')
                 # stdout = os.system('/n/fs/qdb/qACE/miniC2D-1.0.0/bin/linux/miniC2D -c circuit.net.cnf_simplified')
-                print (stdout)
+                # print (stdout)
                 currFileSize = os.path.getsize('circuit.net.cnf_simplified.nnf')
                 if currFileSize<bestFileSize:
                     bestFileSize = currFileSize
@@ -512,7 +512,7 @@ potential ( {target_posterior} | '''
             # Build the evaluator for the arithmetic circuit
             stdout = os.system('mkdir evaluator')
             stdout = os.system('javac -d evaluator -cp /n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar -Xlint:unchecked /n/fs/qdb/Google/Cirq/cirq/sim/Evaluator.java /n/fs/qdb/qACE/org/apache/commons/math3/complex/ComplexFormat.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngine.java /n/fs/qdb/qACE/aceEvalComplexSrc/Calculator.java /n/fs/qdb/qACE/aceEvalComplexSrc/Evidence.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngineSop.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorNormal.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorLogE.java /n/fs/qdb/qACE/aceEvalComplexSrc/UnderflowException.java')
-            print (stdout)
+            # print (stdout)
 
             # Launch the evaluator in a subprocess
             self._subprocess = subprocess.Popen(["java", "-cp", "evaluator:/n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar", "edu.ucla.belief.ace.Evaluator", "circuit.lmap", "circuit.net.cnf_simplified.nnf", str(self._num_qubits), str(self._num_noise)], stdin=subprocess.PIPE)
@@ -533,7 +533,7 @@ potential ( {target_posterior} | '''
 
         measurements = {}  # type: Dict[str, List[np.ndarray]]
         if repetitions == 0:
-            for _, op, _ in circuit.findall_operations_with_gate_type(
+            for _, op, _ in self._circuit.findall_operations_with_gate_type(
                     ops.MeasurementGate):
                 measurements[protocols.measurement_key(op)] = np.empty([0, 1])
             return {k: np.array(v) for k, v in measurements.items()}
@@ -541,19 +541,19 @@ potential ( {target_posterior} | '''
         def measure_or_mixture(op):
             return protocols.is_measurement(op) or protocols.has_mixture(op)
 
-        if circuit.are_all_matches_terminal(measure_or_mixture):
-            return self._run_sweep_sample(circuit, param_resolver, repetitions)
+        if self._circuit.are_all_matches_terminal(measure_or_mixture):
+            return self._run_sweep_sample(self._circuit, param_resolver, repetitions)
         else:
             if not self._intermediate:
                 raise Exception(f'KnowledgeCompilationSimulator not properly configured for intermediate state simulation.')
-            return self._run_sweep_repeat(circuit, param_resolver, repetitions)
+            return self._run_sweep_repeat(self._circuit, param_resolver, repetitions)
 
-        # if circuit.are_all_measurements_terminal():
-        #     return self._run_sweep_sample(circuit, param_resolver, repetitions)
+        # if self._circuit.are_all_measurements_terminal():
+        #     return self._run_sweep_sample(self._circuit, param_resolver, repetitions)
         # else:
         #     if not self._intermediate:
         #         raise Exception(f'KnowledgeCompilationSimulator not properly configured for intermediate state simulation.')
-        #     return self._run_sweep_repeat(circuit, param_resolver, repetitions)
+        #     return self._run_sweep_repeat(self._circuit, param_resolver, repetitions)
 
     def _run_sweep_sample(
         self,
@@ -561,7 +561,7 @@ potential ( {target_posterior} | '''
         param_resolver: study.ParamResolver,
         repetitions: int) -> Dict[str, List[np.ndarray]]:
 
-        print("HERE0")
+        # print("HERE0")
 
         self._repetitions = repetitions
         self._subprocess.stdin.write(f'cc$R${self._repetitions}\n'.encode())
@@ -688,8 +688,8 @@ potential ( {target_posterior} | '''
             perform_measurements: bool=True,
     ) -> Iterator:
 
-        print("param_resolver")
-        print(param_resolver)
+        # print("param_resolver")
+        # print(param_resolver)
 
         if len(self._circuit) == 0:
             # yield sparse_simulator.SparseSimulatorStep(
@@ -711,7 +711,7 @@ potential ( {target_posterior} | '''
 
             # prep_start = time.time()
 
-            print("HERE1")
+            # print("HERE1")
 
             param_dict = {}
             for target_qubit, initial_value in zip (
@@ -729,8 +729,8 @@ potential ( {target_posterior} | '''
             for hash_key, symbols in self._hash_to_symbols.items():
                 param_dict[hash_key] = self._to_java_complex(protocols.resolve_parameters(symbols, param_resolver))
 
-            print("param_dict")
-            print(param_dict)
+            # print("param_dict")
+            # print(param_dict)
             # print("prep time = ")
             # print(time.time() - prep_start)
 
@@ -742,17 +742,25 @@ potential ( {target_posterior} | '''
                     raise Exception(f'KnowledgeCompilationSimulator not properly configured for intermediate state simulation.')
 
             for moment_index, moment in enumerate(self._circuit, start=1):
+                # print("moment_index=")
+                # print(moment_index)
+                # print("moment=")
+                # print(moment)
 
                 if (hasattr(self,'_simulate_sweep_flag') or hasattr(self,'_repetitions')) and moment_index != last_moment_index:
                     pass
                 else:
 
+                    # print("moment_index=")
+                    # print(moment_index)
+                    # print("moment=")
+                    # print(moment)
                     # lmap_start = time.time()
 
                     csv_basename = f'{hash_csv}_{initial_state:04d}_{moment_index:04d}'
                     self._subprocess.stdin.write(f'cc$B${csv_basename}\n'.encode())
-                    print("moment_index=")
-                    print(moment_index)
+                    # print("moment_index=")
+                    # print(moment_index)
                     self._subprocess.stdin.write(f'cc$M${moment_index}\n'.encode())
 
                     with open('circuit.lmap', 'r') as lmap_file:
@@ -796,10 +804,12 @@ potential ( {target_posterior} | '''
                             for repetition in range(self._repetitions):
                                 line = csv_file.readline()
                                 row = line.split(',')
-                                print ("row=")
-                                print (row)
+                                # print ("row=")
+                                # print (row)
                                 bin_list = tobin(int(row[1]),self._num_qubits)
                                 for op in moment:
+                                    # print("op=")
+                                    # print(op)
                                     indices = [self._qubit_map[qubit] for qubit in op.qubits]
                                     if protocols.is_measurement(op):
                                         if isinstance(op.gate, ops.MeasurementGate):
@@ -812,18 +822,20 @@ potential ( {target_posterior} | '''
                                                 for bit, mask in zip(bits, invert_mask)
                                             ]
                                             key = protocols.measurement_key(meas)
+                                            # print("measurements=")
+                                            # print(measurements)
                                             measurements[key].append(corrected)
                         else:
                             for noiseString in range(1<<2*self._num_noise):
-                                print("noiseString")
-                                print(noiseString)
+                                # print("noiseString")
+                                # print(noiseString)
                                 state_vector = []
                                 for outputQubitString in range(1<<self._num_qubits):
                                     if hasattr(self, '_amplitude_indices'):
                                         if outputQubitString in self._amplitude_indices:
                                             line = csv_file.readline()
                                             row = line.split(',')
-                                            print (row)
+                                            # print (row)
                                             assert int(row[1]) == outputQubitString
                                             state_vector.append(complex(row[2]))
                                         else:
@@ -831,27 +843,27 @@ potential ( {target_posterior} | '''
                                     else:
                                         line = csv_file.readline()
                                         row = line.split(',')
-                                        print (row)
-                                        print (row[0])
+                                        # print (row)
+                                        # print (row[0])
                                         assert int(row[1]) == outputQubitString
                                         state_vector.append(complex(row[2]))
-                                        print("state_vector")
-                                        print(state_vector)
+                                        # print("state_vector")
+                                        # print(state_vector)
                                 state_vectors.append(state_vector)
-                                print("state_vectors")
-                                print(state_vectors)
+                                # print("state_vectors")
+                                # print(state_vectors)
                     # assert float(row[2])-1.0 < 1.0/256.0
                     os.remove(csv_name)
 
                     density_matrix = np.zeros((1<<self._num_qubits,1<<self._num_qubits),complex)
                     for state_vector in state_vectors:
-                        print (np.outer(state_vector,np.conj(state_vector)))
+                        # print (np.outer(state_vector,np.conj(state_vector)))
                         density_matrix += np.outer(state_vector,np.conj(state_vector))
-                        print("density_matrix")
-                        print(density_matrix)
+                        # print("density_matrix")
+                        # print(density_matrix)
 
                     if not hasattr(self, '_repetitions'):
-                        print("HERE3")
+                        # print("HERE3")
                         for op in moment:
                             indices = [self._qubit_map[qubit] for qubit in op.qubits]
                             if protocols.is_measurement(op):
@@ -866,6 +878,8 @@ potential ( {target_posterior} | '''
                                         bits, _ = density_matrix_utils.measure_density_matrix(
                                             density_matrix,
                                             indices,
+                                            qid_shape=protocols.qid_shape(self._qubits),
+                                            out=density_matrix,
                                             seed=self._prng)
                                         corrected = [
                                             bit ^ (bit < 2 and mask)
@@ -882,6 +896,8 @@ potential ( {target_posterior} | '''
                     #     measurements=measurements,
                     #     qubit_map=self._qubit_map,
                     #     dtype=self._dtype)
+                    # print("measurements=")
+                    # print(measurements)
                     yield density_matrix_simulator.DensityMatrixStepResult(
                         density_matrix=density_matrix,
                         measurements=measurements,
