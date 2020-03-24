@@ -79,7 +79,7 @@ public class Evaluator {
         }
         assert noiseRVIndex == noiseCount;
         for (noiseRVIndex=0; noiseRVIndex<noiseCount; noiseRVIndex++) {
-          System.out.println(g.nameForVar(noiseRVToVar[noiseRVIndex]));
+          // System.out.println(g.nameForVar(noiseRVToVar[noiseRVIndex]));
         }
 
         // Construct evidence.
@@ -109,8 +109,8 @@ public class Evaluator {
           }
           // System.out.println( String.format("   evidence time=%16d",evidenceDuration) );
           // System.out.println( String.format(" evaluation time=%16d",evaluationDuration) );
-          System.out.println( String.format("  amplitude time=%16d",amplitudeDuration) );
-          System.out.println( String.format("derivatives time=%16d",derivativesDuration) );
+          // System.out.println( String.format("  amplitude time=%16d",amplitudeDuration) );
+          // System.out.println( String.format("derivatives time=%16d",derivativesDuration) );
         } else if (!g.bitstrings.isEmpty()) {
           for (int outputQubitString: g.bitstrings) {
             Complex amplitude = findAmplitude(0, outputQubitString, true); // TODO: enable noise
