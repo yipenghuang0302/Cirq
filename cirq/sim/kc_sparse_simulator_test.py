@@ -672,12 +672,12 @@ class MultiHTestGate(cirq.TwoQubitGate):
         return cirq.H.on_each(*qubits)
 
 
-# def test_simulates_composite():
-#     c = cirq.Circuit(MultiHTestGate().on(*cirq.LineQubit.range(2)))
-#     expected = np.array([0.5] * 4)
-#     np.testing.assert_allclose(c.final_wavefunction(), expected)
-#     np.testing.assert_allclose(cirq.KnowledgeCompilationSimulator(c).simulate(c).state_vector(),
-#                                expected)
+def test_simulates_composite():
+    c = cirq.Circuit(MultiHTestGate().on(*cirq.LineQubit.range(2)))
+    expected = np.array([0.5] * 4)
+    np.testing.assert_allclose(c.final_wavefunction(), expected)
+    np.testing.assert_allclose(cirq.KnowledgeCompilationSimulator(c).simulate(c).state_vector(),
+                               expected)
 
 
 def test_simulate_measurement_inversions():
@@ -847,20 +847,20 @@ def test_random_seed_does_not_modify_global_state_non_terminal_measurements():
     assert result1 == result2
 
 
-# def test_random_seed_does_not_modify_global_state_mixture():
-#     # a = cirq.NamedQubit('a')
-#     a = cirq.LineQubit(0)
-#     circuit = cirq.Circuit(cirq.depolarize(0.5).on(a), cirq.measure(a))
-#
-#     sim = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, seed=1234)
-#     result1 = sim.run(circuit, repetitions=50)
-#
-#     sim = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, seed=1234)
-#     _ = np.random.random()
-#     _ = random.random()
-#     result2 = sim.run(circuit, repetitions=50)
-#
-#     assert result1 == result2
+def test_random_seed_does_not_modify_global_state_mixture():
+    # a = cirq.NamedQubit('a')
+    a = cirq.LineQubit(0)
+    circuit = cirq.Circuit(cirq.depolarize(0.5).on(a), cirq.measure(a))
+
+    sim = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, seed=1234)
+    result1 = sim.run(circuit, repetitions=50)
+
+    sim = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, seed=1234)
+    _ = np.random.random()
+    _ = random.random()
+    result2 = sim.run(circuit, repetitions=50)
+
+    assert result1 == result2
 
 
 # def test_random_seed_terminal_measurements_deterministic():

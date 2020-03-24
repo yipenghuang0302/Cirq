@@ -1114,7 +1114,7 @@ def test_simulate_noise_with_terminal_measurements():
     circuit1 = cirq.Circuit(cirq.measure(q))
     circuit2 = circuit1 + cirq.I(q)
 
-    simulator1 = cirq.KnowledgeCompilationSimulator(circuit1, noise=cirq.X)
+    simulator1 = cirq.KnowledgeCompilationSimulator(circuit1, intermediate=True, noise=cirq.X)
     result1 = simulator1.run(circuit1, repetitions=10)
     simulator2 = cirq.KnowledgeCompilationSimulator(circuit2, intermediate=True, noise=cirq.X)
     result2 = simulator2.run(circuit2, repetitions=10)
