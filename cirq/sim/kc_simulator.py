@@ -238,12 +238,12 @@ potential ( {target_posterior} | '''
 
         for _ in range(1):
             if not self._intermediate: # messes up moment steps, moment step samping
-                # optimizers.ExpandComposite().optimize_circuit(circuit)
+                optimizers.ExpandComposite().optimize_circuit(circuit)
                 # optimizers.ConvertToCzAndSingleGates().optimize_circuit(circuit) # cannot work with params
-                # optimizers.MergeInteractions().optimize_circuit(circuit)
+                # optimizers.MergeInteractions().optimize_circuit(circuit) # generally okay, but may cause test_simulate_random_unitary to fail due to small circuit sizes
                 optimizers.MergeSingleQubitGates().optimize_circuit(circuit)
-                # optimizers.DropEmptyMoments().optimize_circuit(circuit)
-                # optimizers.EjectPhasedPaulis().optimize_circuit(circuit)
+                optimizers.DropEmptyMoments().optimize_circuit(circuit)
+                optimizers.EjectPhasedPaulis().optimize_circuit(circuit)
                 pass
             optimizers.EjectZ().optimize_circuit(circuit)
             # optimizers.DropNegligible().optimize_circuit(circuit)
@@ -459,13 +459,14 @@ potential ( {target_posterior} | '''
         # Bayesian network to conjunctive normal form
         # TODO: autoinstall this
         if not self._intermediate:
-            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -e -d -a -b -i circuit.net -w -s')
+            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -c -d -a -b -i circuit.net -w -s')
             # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e: Equal probabilities are encoded is incompatible with dtbnorders
         else:
             stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -b -i circuit.net -w -s')
             # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e and -b used together causes moment steps simulation to fail
+            # -c is incompatible with sparse_simulator tests on test_run_mixture_with_gates
         # print (stdout)
 
         self._node_re_compile = re.compile(r'cc\$I\$(\d+)\$1.0\$\+\$n(\d+)q(\d+)\$') # are negative literals and opt bool valid?
