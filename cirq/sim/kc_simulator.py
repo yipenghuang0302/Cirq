@@ -157,7 +157,7 @@ potential ( {target_posterior} | '''
 
     net_prelude_noise = \
 '''node {target_posterior} {{
-    states = ("M_0" "M_1" "M_2" "M_3");
+    states = ("M_0" "M_1");
     subtype = depolarize;
 }}
 potential ( {target_posterior} | '''
@@ -236,7 +236,7 @@ potential ( {target_posterior} | '''
         circuit = (program if isinstance(program, circuits.Circuit) else program.to_circuit())
         circuit = circuits.Circuit(self._noise.noisy_moments(circuit, sorted(circuit.all_qubits())))
 
-        for _ in range(1):
+        for _ in range(2):
             if not self._intermediate: # messes up moment steps, moment step samping
                 optimizers.ExpandComposite().optimize_circuit(circuit)
                 # optimizers.ConvertToCzAndSingleGates().optimize_circuit(circuit) # cannot work with params
@@ -244,8 +244,9 @@ potential ( {target_posterior} | '''
                 optimizers.MergeSingleQubitGates().optimize_circuit(circuit)
                 optimizers.DropEmptyMoments().optimize_circuit(circuit)
                 optimizers.EjectPhasedPaulis().optimize_circuit(circuit)
+                # optimizers.SynchronizeTerminalMeasurements().optimize_circuit(circuit)
                 pass
-            optimizers.EjectZ().optimize_circuit(circuit)
+            # optimizers.EjectZ().optimize_circuit(circuit) # incompatible with noise simulation
             # optimizers.DropNegligible().optimize_circuit(circuit)
 
         self._circuit = circuit
@@ -263,7 +264,7 @@ potential ( {target_posterior} | '''
         self._initial_state_lockout = False if initial_state is None else True
         # generate Bayesian network nodes with no priors for qubit initialization
         qubit_to_last_moment_index = {}
-        # noisy_moments = set()
+        noisy_moments = set()
         actual_initial_state = 0 if initial_state is None else initial_state
         for target_qubit, initial_value in zip (
             self._qubits,
@@ -309,7 +310,7 @@ potential ( {target_posterior} | '''
                     self._num_noise += 1
 
                     rv_node_string = self.net_prelude_noise + self.net_interlude
-                    rv_node_string += '( ' + self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)) + ' ' + self._to_cpp_complex_hash(cmath.sqrt(op.gate.gamma)) + ' 0 0 )'
+                    rv_node_string += '( ' + self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)) + ' ' + self._to_cpp_complex_hash(cmath.sqrt(op.gate.gamma)) + ' )'
                     rv_node_string += self.net_postlude
 
                     qubit = op.qubits[0]
@@ -321,7 +322,7 @@ potential ( {target_posterior} | '''
                     node_string += parent + ' '
                     node_string += self.net_interlude
                     node_string += '( '
-                    node_string += '((1 0)(0 1)) ((1 0)(0 -1)) ((1 0)(0 1)) ((1 0)(0 1)) '
+                    node_string += '((1 0)(0 1)) ((1 0)(0 -1)) '
                     node_string += ')'
                     node_string += self.net_postlude
 
@@ -334,13 +335,13 @@ potential ( {target_posterior} | '''
                         ))
 
                     qubit_to_last_moment_index[qubit] = moment_index
-                    # noisy_moments.add(moment_index)
+                    noisy_moments.add(moment_index)
 
                 elif isinstance (op.gate,ops.AmplitudeDampingChannel):
                     self._num_noise += 1
 
                     rv_node_string = self.net_prelude_noise + self.net_interlude
-                    rv_node_string += '( ' + self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)) + ' ' + self._to_cpp_complex_hash(cmath.sqrt(op.gate.gamma)) + ' 0 0 )'
+                    rv_node_string += '( ' + self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)) + ' ' + self._to_cpp_complex_hash(cmath.sqrt(op.gate.gamma)) + ' )'
                     rv_node_string += self.net_postlude
 
                     qubit = op.qubits[0]
@@ -352,7 +353,7 @@ potential ( {target_posterior} | '''
                     node_string += parent + ' '
                     node_string += self.net_interlude
                     node_string += '( '
-                    node_string += '((1 0)(0 1)) ((1 0)(1 0)) ((1 0)(0 1)) ((1 0)(0 1)) '
+                    node_string += '((1 0)(0 1)) ((1 0)(1 0)) '
                     node_string += ')'
                     node_string += self.net_postlude
 
@@ -365,7 +366,7 @@ potential ( {target_posterior} | '''
                         ))
 
                     qubit_to_last_moment_index[qubit] = moment_index
-                    # noisy_moments.add(moment_index)
+                    noisy_moments.add(moment_index)
 
                 elif protocols.has_mixture(op):
                     self._num_noise += 1
@@ -373,7 +374,7 @@ potential ( {target_posterior} | '''
                     rv_node_string = self.net_prelude_noise
                     rv_node_string += self.net_interlude
                     rv_node_string += '( '
-                    for index in range(4):
+                    for index in range(2):
                         if index<len(protocols.mixture(op)):
                             component = protocols.mixture(op)[index]
                             rv_node_string += self._to_cpp_complex_hash(cmath.sqrt(component[0])) + ' '
@@ -393,7 +394,7 @@ potential ( {target_posterior} | '''
                     parents.append(parent)
                     node_string += self.net_interlude
                     node_string += '( '
-                    for index in range(4):
+                    for index in range(2):
                         if index<len(protocols.mixture(op)):
                             component = protocols.mixture(op)[index]
                             node_string += self._net_data_format(parents,0).format(data=self._cpt_to_cpp_complex_hash(component[1]))
@@ -412,14 +413,17 @@ potential ( {target_posterior} | '''
                         ))
 
                     qubit_to_last_moment_index[qubit] = moment_index
-                    # noisy_moments.add(moment_index)
+                    noisy_moments.add(moment_index)
 
                 elif not isinstance(op.gate,ops.MeasurementGate):
 
-                    if protocols.has_unitary(op):
+                    # print("HERE4")
+                    # print(repr(op))
+                    # print(isinstance(op.gate, ops.CZPowGate))
+
+                    if protocols.has_unitary(op) or isinstance(op.gate, ops.CZPowGate):
                         unitary_matrix = protocols.unitary(op)
                     else: # protocols.has_channel(op)
-                        # print("HERE4")
                         unitary_matrix = [[0+0j,0+0j],[0+0j,0+0j]]
                         for component in protocols.channel(op):
                             # print ("component")
@@ -459,7 +463,7 @@ potential ( {target_posterior} | '''
         # Bayesian network to conjunctive normal form
         # TODO: autoinstall this
         if not self._intermediate:
-            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -c -d -a -b -i circuit.net -w -s')
+            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -i circuit.net -w -s')
             # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e: Equal probabilities are encoded is incompatible with dtbnorders
         else:
@@ -482,7 +486,7 @@ potential ( {target_posterior} | '''
                         if match:
                             moment = int(match.group(2))
                             qubit = self._qubits[int(match.group(3))]
-                            if moment<qubit_to_last_moment_index[qubit]:
+                            if moment<qubit_to_last_moment_index[qubit] and moment not in noisy_moments:
                                 existentially_quantified_variables.append(match.group(1))
 
         if not self._intermediate:
@@ -495,10 +499,10 @@ potential ( {target_posterior} | '''
         try:
             # Conjunctive normal form to arithmetic circuit
             bestFileSize = sys.maxsize
-            for _ in range(1):
+            for _ in range(4):
                 stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -simplify_s -in circuit.net.cnf -visualize')
                 if not self._intermediate:
-                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -exist variables.file -reduce -in circuit.net.cnf_simplified -visualize')
+                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -exist variables.file -reduce -suppress_ane -in circuit.net.cnf_simplified -visualize')
                     # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -exist variables.file -reduce -in circuit.net.cnf_simplified -minimize -suppress_ane -determined circuit.net.pmap')
                 else:
                     stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -reduce -in circuit.net.cnf_simplified -visualize')
@@ -539,22 +543,22 @@ potential ( {target_posterior} | '''
                 measurements[protocols.measurement_key(op)] = np.empty([0, 1])
             return {k: np.array(v) for k, v in measurements.items()}
 
-        def measure_or_mixture(op):
-            return protocols.is_measurement(op) or protocols.has_mixture(op)
-
-        if self._circuit.are_all_matches_terminal(measure_or_mixture):
-            return self._run_sweep_sample(self._circuit, param_resolver, repetitions)
-        else:
-            if not self._intermediate:
-                raise Exception(f'KnowledgeCompilationSimulator not properly configured for intermediate state simulation.')
-            return self._run_sweep_repeat(self._circuit, param_resolver, repetitions)
-
-        # if self._circuit.are_all_measurements_terminal():
+        # def measure_or_mixture(op):
+        #     return protocols.is_measurement(op) or protocols.has_mixture(op)
+        #
+        # if self._circuit.are_all_matches_terminal(measure_or_mixture):
         #     return self._run_sweep_sample(self._circuit, param_resolver, repetitions)
         # else:
         #     if not self._intermediate:
         #         raise Exception(f'KnowledgeCompilationSimulator not properly configured for intermediate state simulation.')
         #     return self._run_sweep_repeat(self._circuit, param_resolver, repetitions)
+
+        if self._circuit.are_all_measurements_terminal():
+            return self._run_sweep_sample(self._circuit, param_resolver, repetitions)
+        else:
+            if not self._intermediate:
+                raise Exception(f'KnowledgeCompilationSimulator not properly configured for intermediate state simulation.')
+            return self._run_sweep_repeat(self._circuit, param_resolver, repetitions)
 
     def _run_sweep_sample(
         self,
@@ -827,7 +831,7 @@ potential ( {target_posterior} | '''
                                             # print(measurements)
                                             measurements[key].append(corrected)
                         else:
-                            for noiseString in range(1<<2*self._num_noise):
+                            for noiseString in range(1<<self._num_noise):
                                 # print("noiseString")
                                 # print(noiseString)
                                 state_vector = []
@@ -856,14 +860,15 @@ potential ( {target_posterior} | '''
                     # assert float(row[2])-1.0 < 1.0/256.0
                     os.remove(csv_name)
 
-                    density_matrix = np.zeros((1<<self._num_qubits,1<<self._num_qubits),complex)
-                    for state_vector in state_vectors:
-                        # print (np.outer(state_vector,np.conj(state_vector)))
-                        density_matrix += np.outer(state_vector,np.conj(state_vector))
-                        # print("density_matrix")
-                        # print(density_matrix)
-
+                    density_matrix = None
                     if not hasattr(self, '_repetitions'):
+                        density_matrix = np.zeros((1<<self._num_qubits,1<<self._num_qubits),complex)
+                        for state_vector in state_vectors:
+                            # print (np.outer(state_vector,np.conj(state_vector)))
+                            density_matrix += np.outer(state_vector,np.conj(state_vector))
+                            # print("density_matrix")
+                            # print(density_matrix)
+
                         # print("HERE3")
                         for op in moment:
                             indices = [self._qubit_map[qubit] for qubit in op.qubits]
