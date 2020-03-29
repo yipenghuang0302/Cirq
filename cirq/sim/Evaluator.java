@@ -93,18 +93,24 @@ public class Evaluator {
         // csv.newLine();
 
         if ( g.repetitions!=0 ) {
+          long noiseString = ThreadLocalRandom.current().nextLong( 1L<<noiseCount );
           long outputQubitString = ThreadLocalRandom.current().nextLong( 1L<<qubitCount );
-          for ( int iter=0; iter<256; iter++ ) { // warmup
-            Complex markovAmplitude = findAmplitude(0, outputQubitString, false); // TODO: enable noise
-            outputQubitString = findDerivatives(outputQubitString);
+          for ( int iter=0; iter<16; iter++ ) { // warmup
+            // System.out.println("noiseString="+noiseString+" outputQubitString"+outputQubitString);
+            Complex markovAmplitude = findAmplitude(noiseString, outputQubitString, false);
+            long[] noiseAndOutputQubit = findDerivatives(noiseString, outputQubitString);
+            noiseString = noiseAndOutputQubit[0];
+            outputQubitString = noiseAndOutputQubit[1];
           }
           for ( int iter=0; iter<g.repetitions; iter++ ) {
             long amplitudeStart = System.nanoTime();
-            Complex markovAmplitude = findAmplitude(0, outputQubitString, true);  // TODO: enable noise
+            Complex markovAmplitude = findAmplitude(noiseString, outputQubitString, true);
             amplitudeDuration += System.nanoTime()-amplitudeStart;
 
             long derivativesStart = System.nanoTime();
-            outputQubitString = findDerivatives(outputQubitString);
+            long[] noiseAndOutputQubit = findDerivatives(noiseString, outputQubitString);
+            noiseString = noiseAndOutputQubit[0];
+            outputQubitString = noiseAndOutputQubit[1];
             derivativesDuration += System.nanoTime()-derivativesStart;
           }
           // System.out.println( String.format("   evidence time=%16d",evidenceDuration) );
@@ -116,7 +122,7 @@ public class Evaluator {
             Complex amplitude = findAmplitude(0, outputQubitString, true); // TODO: enable noise
           }
         } else {
-          for (long noiseString=0; noiseString<1L<<2*noiseCount; noiseString++) {
+          for (long noiseString=0; noiseString<1L<<noiseCount; noiseString++) {
             double probabilitySum = 0.0;
             for (long outputQubitString=0; outputQubitString<1L<<qubitCount; outputQubitString++) {
               Complex amplitude = findAmplitude(noiseString, outputQubitString, true);
@@ -138,6 +144,7 @@ public class Evaluator {
     }
   }
 
+  static long prevNoiseString = Long.MAX_VALUE;
   static long prevQubitString = Long.MAX_VALUE;
   static Complex amplitude;
   private static Complex findAmplitude (
@@ -149,7 +156,7 @@ public class Evaluator {
     for (int noise=0; noise<noiseCount; noise++) {
       int varForNoise = noiseRVToVar[noise];
       // to adhere to Cirq's endian convention:
-      evidence.varCommit(varForNoise, ((int)(noiseString>>2*(noiseCount-noise-1)))&3);
+      evidence.varCommit(varForNoise, ((int)(noiseString>>(noiseCount-noise-1)))&1);
     }
     for (int qubit=0; qubit<qubitCount; qubit++) {
       int varForQubit = qubitFinalToVar[qubit];
@@ -159,7 +166,7 @@ public class Evaluator {
     // evidenceDuration += System.nanoTime() - evidenceStart;  //divide by 1000000 to get milliseconds.
 
     // long evaluationStart = System.nanoTime();
-    if (outputQubitString!=prevQubitString) {
+    if ( noiseString!=prevNoiseString || outputQubitString!=prevQubitString ) {
       // Perform online inference in the context of the evidence set by
       // invoking OnlineEngine.evaluate().  Doing so will compute probability of
       // evidence.  Inference runs in time that is linear in the size of the
@@ -171,19 +178,17 @@ public class Evaluator {
       // computed by OnlineEngine.evaluate().
       amplitude = g.evaluationResults();
     }
+    prevNoiseString = noiseString;
     prevQubitString = outputQubitString;
     // evaluationDuration += System.nanoTime() - evaluationStart;  //divide by 1000000 to get milliseconds.
 
     // Finally, write the results to out file.
     if (print) {
       if ( amplitude.getImaginary()<0 ) {
-        // csv.write(outputQubitString+","+amplitude.getReal()+""+amplitude.getImaginary()+"j"+","+evidenceDuration+","+evaluationDuration);
         csv.write(noiseString+","+outputQubitString+","+amplitude.getReal()+""+amplitude.getImaginary()+"j"+","+evidenceDuration+","+evaluationDuration);
       } else if ( amplitude.getImaginary()==0 ) {
-        // csv.write(outputQubitString+","+amplitude.getReal()+","+evidenceDuration+","+evaluationDuration);
         csv.write(noiseString+","+outputQubitString+","+amplitude.getReal()+","+evidenceDuration+","+evaluationDuration);
       } else {
-        // csv.write(outputQubitString+","+amplitude.getReal()+"+"+amplitude.getImaginary()+"j"+","+evidenceDuration+","+evaluationDuration);
         csv.write(noiseString+","+outputQubitString+","+amplitude.getReal()+"+"+amplitude.getImaginary()+"j"+","+evidenceDuration+","+evaluationDuration);
       }
       csv.newLine();
@@ -192,7 +197,8 @@ public class Evaluator {
     return amplitude;
   }
 
-  private static long findDerivatives (
+  private static long[] findDerivatives (
+    long noiseString,
     long outputQubitString
   ) throws Exception {
 
@@ -218,32 +224,43 @@ public class Evaluator {
     //   varPosteriors[v] = g.varPosteriors(v);
     // }
 
-    int randomQubit = ThreadLocalRandom.current().nextInt(qubitCount);
-    // System.out.println("randomQubit = " + randomQubit);
-    int varForQubit = qubitFinalToVar[randomQubit];
+    int randomNoiseOrQubit = ThreadLocalRandom.current().nextInt(noiseCount+qubitCount);
+    // System.out.println("noiseCount = " + noiseCount);
+    // System.out.println("qubitCount = " + qubitCount);
+    // System.out.println("randomNoiseOrQubit = " + randomNoiseOrQubit);
+    int varForNoiseOrQubit = randomNoiseOrQubit<noiseCount ? noiseRVToVar[randomNoiseOrQubit] : qubitFinalToVar[randomNoiseOrQubit-noiseCount];
 
-    // evidence.varCommit(varForQubit, 0);
+    // evidence.varCommit(varForNoiseOrQubit, 0);
     // g.evaluate(evidence);
     // Complex amplitude_0 = g.evaluationResults();
-    double partial_0 = g.varPartials(varForQubit)[0].abs() * g.varPartials(varForQubit)[0].abs();
     // double partial_0 = amplitude_0.abs() * amplitude_0.abs();
+    double partial_0 = g.varPartials(varForNoiseOrQubit)[0].abs() * g.varPartials(varForNoiseOrQubit)[0].abs();
 
-    // evidence.varCommit(varForQubit, 1);
+    // evidence.varCommit(varForNoiseOrQubit, 1);
     // g.evaluate(evidence);
     // Complex amplitude_1 = g.evaluationResults();
-    double partial_1 = g.varPartials(varForQubit)[1].abs() * g.varPartials(varForQubit)[1].abs();
     // double partial_1 = amplitude_1.abs() * amplitude_1.abs();
+    double partial_1 = g.varPartials(varForNoiseOrQubit)[1].abs() * g.varPartials(varForNoiseOrQubit)[1].abs();
 
     double probability = partial_1/(partial_0+partial_1);
     // System.out.println("probability = " + probability);
     if (Double.isNaN(probability)) {
+      noiseString = ThreadLocalRandom.current().nextLong( 1L<<noiseCount );
       outputQubitString = ThreadLocalRandom.current().nextLong( 1L<<qubitCount );
       // throw new Exception("Gibbs sampling transition probability is NaN.");
     } else {
       if ( ThreadLocalRandom.current().nextDouble() <= probability ) {
-          outputQubitString |=  (1L << (qubitCount-randomQubit-1));
+        if (randomNoiseOrQubit<noiseCount) {
+          noiseString |=  (1L << (noiseCount-randomNoiseOrQubit-1));
+        } else {
+          outputQubitString |=  (1L << (qubitCount-(randomNoiseOrQubit-noiseCount)-1));
+        }
       } else {
-          outputQubitString &= ~(1L << (qubitCount-randomQubit-1));
+        if (randomNoiseOrQubit<noiseCount) {
+          noiseString &= ~(1L << (noiseCount-randomNoiseOrQubit-1));
+        } else {
+          outputQubitString &= ~(1L << (qubitCount-(randomNoiseOrQubit-noiseCount)-1));
+        }
       }
     }
 
@@ -272,7 +289,10 @@ public class Evaluator {
     //       Arrays.toString(varPosteriors[v]));
     // }
 
-    return outputQubitString;
+    long[] ans = new long[2];
+    ans[0] = noiseString;
+    ans[1] = outputQubitString;
+    return ans;
   }
 
 }
