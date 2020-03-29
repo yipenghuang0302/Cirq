@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Runs the Quantum Approximate Optimization Algorithm on Max-Cut.
 
 === EXAMPLE OUTPUT ===
@@ -52,8 +51,8 @@ The approximation ratio achieved is 1.0.
 import itertools
 
 import numpy as np
-import networkx
 import sympy
+import networkx
 import scipy.optimize
 
 import cirq
@@ -61,10 +60,10 @@ import time
 
 from collections import defaultdict
 
-def main(repetitions=65536):
+def main(repetitions=1024, maxiter=50):
     # Set problem parameters
-    n = 5
-    p = 2
+    n = 8 # 6
+    p = 1
 
     # Generate a random 3-regular graph on n nodes
     graph = networkx.random_regular_graph(2, n)
@@ -75,18 +74,32 @@ def main(repetitions=65536):
     # Print an example circuit
     betas = np.random.uniform(-np.pi, np.pi, size=p)
     gammas = np.random.uniform(-np.pi, np.pi, size=p)
-    circuit = qaoa_max_cut_circuit(qubits, p, graph)
     circuit_no_meas = qaoa_max_cut_circuit_no_meas(qubits, p, graph)
-    # print('Example QAOA circuit:')
-    print(circuit.to_text_diagram(transpose=True))
+    print('Example QAOA circuit:')
+    print(circuit_no_meas.to_text_diagram(transpose=True))
 
-    # Create variables to store the largest cut and cut value found
-    largest_cut_found = None
-    largest_cut_value_found = 0
+    # noise = cirq.ConstantQubitNoiseModel(cirq.asymmetric_depolarize(0.2,0.3,0.4)) # asymmetric depolarizing
+    # noise = cirq.ConstantQubitNoiseModel(cirq.depolarize(0.5)) # symmetric depolarizing
+
+    # noise = cirq.ConstantQubitNoiseModel(cirq.generalized_amplitude_damp(0.1,0.0))
+    # noise = cirq.ConstantQubitNoiseModel(cirq.amplitude_damp(0.25))
+    # noise = cirq.ConstantQubitNoiseModel(cirq.phase_damp(0.25))
+
+    # noise = cirq.ConstantQubitNoiseModel(cirq.phase_flip(0.25)) # mixture
+    noise = cirq.ConstantQubitNoiseModel(cirq.bit_flip(0.03125)) # mixture
+
+    circuit_no_meas = cirq.Circuit(cirq.NoiseModel.from_noise_model_like(noise).noisy_moments(circuit_no_meas, sorted(circuit_no_meas.all_qubits())))
+    circuit = cirq.Circuit( circuit_no_meas, cirq.measure(*qubits, key='m') )
 
     # Initialize simulator
-    sp_simulator = cirq.Simulator()
     kc_simulator = cirq.KnowledgeCompilationSimulator( circuit, initial_state=0 )
+    dm_simulator = cirq.DensityMatrixSimulator()
+
+    # Create variables to store the largest cut and cut value found
+    kc_largest_cut_found = None
+    kc_largest_cut_value_found = 0
+    dm_largest_cut_found = None
+    dm_largest_cut_value_found = 0
 
     # Define objective function (we'll use the negative expected cut value)
     iter = 0
@@ -96,77 +109,87 @@ def main(repetitions=65536):
         betas_dict = { 'beta'+str(index):betas[index] for index in range(p) }
         gammas = x[p:]
         gammas_dict = { 'gamma'+str(index):gammas[index] for index in range(p) }
-        resolver = cirq.ParamResolver({**betas_dict,**gammas_dict})
+        param_resolver = cirq.ParamResolver({**betas_dict,**gammas_dict})
+
+        # VALIDATE STATE VECTOR SIMULATION
+        # kc_sim_result = kc_simulator.simulate(circuit_no_meas, param_resolver=param_resolver)
+        dm_sim_result = dm_simulator.simulate(circuit_no_meas, param_resolver=param_resolver)
+        # np.testing.assert_almost_equal(
+        #     kc_sim_result.final_density_matrix,
+        #     dm_sim_result.final_density_matrix,
+        #     decimal=4
+        # )
+
+        # VALIDATE SAMPLING HISTOGRAMS
 
         # Sample bitstrings from circuit
         kc_smp_start = time.time()
-        kc_smp_result = kc_simulator.run(circuit, param_resolver=resolver, repetitions=repetitions)
+        kc_smp_result = kc_simulator.run(circuit, param_resolver=param_resolver, repetitions=repetitions)
         kc_smp_time = time.time() - kc_smp_start
-        bitstrings = kc_smp_result.measurements['m']
-        # Process bitstrings
-        # sum_of_cut_values = 0
-        # nonlocal largest_cut_found
-        # nonlocal largest_cut_value_found
+        kc_bitstrings = kc_smp_result.measurements['m']
+
+        # Process histogram
         kc_histogram = defaultdict(int)
-        for bitstring in bitstrings:
-            # print (bitstring)
+        for bitstring in kc_bitstrings:
             integer = 0
             for pos, bit in enumerate(bitstring):
                 integer += bit<<pos
             kc_histogram[integer] += 1
-            # value = cut_value(bitstring, graph)
-            # sum_of_cut_values += value
-            # if value > largest_cut_value_found:
-            #     largest_cut_value_found = value
-            #     largest_cut_found = bitstring
-        # print (histogram)
-        # mean = sum_of_cut_values / repetitions
-        # print ('mean =')
-        # print (mean)
-        # print ('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
-        # return -mean
+
+        # Process bitstrings
+        nonlocal kc_largest_cut_found
+        nonlocal kc_largest_cut_value_found
+        kc_values = cut_values(kc_bitstrings, graph)
+        kc_max_value_index = np.argmax(kc_values)
+        kc_max_value = kc_values[kc_max_value_index]
+        if kc_max_value > kc_largest_cut_value_found:
+            kc_largest_cut_value_found = kc_max_value
+            kc_largest_cut_found = kc_bitstrings[kc_max_value_index]
+        kc_mean = np.mean(kc_values)
 
         # Sample bitstrings from circuit
-        sp_smp_start = time.time()
-        sp_sim_result = sp_simulator.simulate(circuit_no_meas, param_resolver=resolver)
-        # sp_smp_result = sp_simulator.run(circuit, param_resolver=resolver, repetitions=repetitions)
-        sp_smp_time = time.time() - sp_smp_start
-        # bitstrings = sp_smp_result.measurements['m']
+        dm_smp_start = time.time()
+        dm_smp_result = dm_simulator.run(circuit, param_resolver=param_resolver, repetitions=repetitions)
+        dm_smp_time = time.time() - dm_smp_start
+        dm_bitstrings = dm_smp_result.measurements['m']
+
+        # Process histogram
+        dm_histogram = defaultdict(int)
+        for bitstring in dm_bitstrings:
+            integer = 0
+            for pos, bit in enumerate(bitstring):
+                integer += bit<<pos
+            dm_histogram[integer] += 1
+
         # Process bitstrings
-        mean = 0
-        sum_of_cut_values = 0
-        nonlocal largest_cut_found
-        nonlocal largest_cut_value_found
-        # sp_histogram = defaultdict(int)
-        # for bitstring in bitstrings:
-        #     integer = 0
-        #     for pos, bit in enumerate(bitstring):
-        #         integer += bit<<pos
-        #     sp_histogram[integer] += 1
-        #     value = cut_value(bitstring, graph)
-        #     sum_of_cut_values += value
-        #     if value > largest_cut_value_found:
-        #         largest_cut_value_found = value
-        #         largest_cut_found = bitstring
-        # mean = sum_of_cut_values / repetitions
-        # for bitstring in range(1<<n):
-        #     print ('bitstring='+str(bitstring)+' kc_samples='+str(kc_histogram[bitstring])+' sp_samples='+str(sp_histogram[bitstring]))
-        for index, amplitude in enumerate(sp_sim_result._final_simulator_state.state_vector):
+        nonlocal dm_largest_cut_found
+        nonlocal dm_largest_cut_value_found
+        dm_values = cut_values(dm_bitstrings, graph)
+        dm_max_value_index = np.argmax(dm_values)
+        dm_max_value = dm_values[dm_max_value_index]
+        if dm_max_value > dm_largest_cut_value_found:
+            dm_largest_cut_value_found = dm_max_value
+            dm_largest_cut_found = dm_bitstrings[dm_max_value_index]
+        dm_mean = np.mean(dm_values)
+
+        nonlocal iter
+        # PRINT HISTOGRAMS
+        # for index, amplitude in enumerate(dm_sim_result.state_vector()):
+        #     bitstring = format(index,'b').zfill(n)
+        #     probability = abs(amplitude) * abs(amplitude)
+        #     print ('iter='+str(iter)+' bitstring='+str(index)+' kc_samples='+str(kc_histogram[index]/repetitions)+' dm_samples='+str(dm_histogram[index]/repetitions)+' dm_probability='+str(probability))
+        for index, probability in enumerate(cirq.sim.density_matrix_utils._probs(
+            dm_sim_result.final_density_matrix,
+            [index for index in range(n)],
+            cirq.protocols.qid_shape(qubits)
+            )):
             bitstring = format(index,'b').zfill(n)
-            value = cut_value(bitstring, graph)
-            probability = abs(amplitude) * abs(amplitude)
-            mean += value * probability
-            if value > largest_cut_value_found:
-                largest_cut_value_found = value
-                largest_cut_found = bitstring
-            nonlocal iter
-            print ('iter='+str(iter)+' bitstring='+str(index)+' kc_samples='+str(kc_histogram[index])+' sp_samples='+str(probability))
-        # print ( 'kc_smp_time=' + str(kc_smp_time) + ' sp_smp_time=' + str(sp_smp_time) )
-        # print ('mean =')
-        # print (mean)
-        # print ('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
+            print ('iter='+str(iter)+' bitstring='+str(index)+' kc_samples='+str(kc_histogram[index]/repetitions)+' dm_samples='+str(dm_histogram[index]/repetitions)+' dm_probability='+str(probability))
+        print ('kc_mean='+str(kc_mean)+' dm_mean='+str(dm_mean))
+        print ( 'kc_smp_time=' + str(kc_smp_time) + ' dm_smp_time=' + str(dm_smp_time) )
+        print ('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
         iter += 1
-        return -mean
+        return -dm_mean
 
     # Pick an initial guess
     x0 = np.random.uniform(-np.pi, np.pi, size=2 * p)
@@ -176,21 +199,21 @@ def main(repetitions=65536):
     scipy.optimize.minimize(f,
                             x0,
                             method='Nelder-Mead',
-                            options={'maxiter': 64})
+                            options={'maxiter': maxiter})
 
     # Compute best possible cut value via brute force search
-    max_cut_value = max(
-        cut_value(bitstring, graph)
-        for bitstring in itertools.product(range(2), repeat=n))
+    all_bitstrings = np.array(list(itertools.product(range(2), repeat=n)))
+    all_values = cut_values(all_bitstrings, graph)
+    max_cut_value = np.max(all_values)
 
     # Print the results
-    print('The largest cut value found was {}.'.format(largest_cut_value_found))
+    print('The largest cut value found was {}.'.format(dm_largest_cut_value_found))
     print('The largest possible cut has size {}.'.format(max_cut_value))
     print('The approximation ratio achieved is {}.'.format(
-        largest_cut_value_found / max_cut_value))
+        dm_largest_cut_value_found / max_cut_value))
 
 
-def Rzz(rads):
+def rzz(rads):
     """Returns a gate with the matrix exp(-i Z⊗Z rads)."""
     return cirq.ZZPowGate(exponent=2 * rads / np.pi, global_shift=-0.5)
 
@@ -198,19 +221,10 @@ def Rzz(rads):
 def qaoa_max_cut_unitary(qubits, p, graph):  # Nodes should be integers
     for index in range(p):
         yield (
-            Rzz(-0.5 * sympy.Symbol('gamma'+str(index))).on(qubits[i], qubits[j]) for i, j in graph.edges)
-        yield cirq.Rx(2 * sympy.Symbol('beta'+str(index))).on_each(*qubits)
+            rzz(-0.5 * sympy.Symbol('gamma'+str(index))).on(qubits[i], qubits[j]) for i, j in graph.edges)
+        yield cirq.rx(2 * sympy.Symbol('beta'+str(index))).on_each(*qubits)
 
 
-def qaoa_max_cut_circuit(qubits, p, graph):  # Nodes should be integers
-    return cirq.Circuit(
-        # Prepare uniform superposition
-        cirq.H.on_each(*qubits),
-        # Apply QAOA unitary
-        qaoa_max_cut_unitary(qubits, p, graph),
-        # Measure
-        cirq.measure(*qubits, key='m')
-        )
 def qaoa_max_cut_circuit_no_meas(qubits, p, graph):  # Nodes should be integers
     return cirq.Circuit(
         # Prepare uniform superposition
@@ -222,8 +236,12 @@ def qaoa_max_cut_circuit_no_meas(qubits, p, graph):  # Nodes should be integers
         )
 
 
-def cut_value(bitstring, graph):
-    return sum(bitstring[i] != bitstring[j] for i, j in graph.edges)
+def cut_values(bitstrings, graph):
+    mat = networkx.adjacency_matrix(graph, nodelist=sorted(graph.nodes))
+    vecs = (-1)**bitstrings
+    vals = 0.5 * np.sum(vecs * (mat @ vecs.T).T, axis=-1)
+    vals = 0.5 * (graph.size() - vals)
+    return vals
 
 
 if __name__ == '__main__':

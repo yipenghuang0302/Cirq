@@ -86,6 +86,8 @@ Execute Multiplier
 """
 
 
+import numpy as np
+import sympy
 import cirq
 
 
@@ -222,37 +224,65 @@ class Multiplier(cirq.Gate):
 
 def init_qubits(x_bin, *qubits):
     for x, qubit in zip(x_bin, list(qubits)[::-1]):
-        if x == '1':
-            yield cirq.X(qubit)
+        yield cirq.X(qubit)**float(x)
 
+def init_qubits_sym(x_bin, *qubits):
+    for x, qubit in zip(x_bin, list(qubits)[::-1]):
+        yield cirq.X(qubit)**x
 
-def experiment_adder(p, q, n=3):
-    a_bin = '{:08b}'.format(p)[-n:]
-    b_bin = '{:08b}'.format(q)[-n:]
+def experiment_adder(n=3):
+
     qubits = cirq.LineQubit.range(3 * n)
-    # c = qubits[0::3]
+    # c = dm_qubits[0::3]
     a = qubits[1::3]
     b = qubits[2::3]
-    sv_circuit = cirq.Circuit(init_qubits(a_bin, *a), init_qubits(b_bin, *b),
-                           Adder(n * 3).on(*qubits),
-                           cirq.measure(*b, key='result'))
-    kc_circuit = cirq.Circuit(init_qubits(a_bin, *a), init_qubits(b_bin, *b),
-                           cirq.decompose(Adder(n * 3).on(*qubits)),
-                           cirq.measure(*b, key='result'))
-    sv_simulator = cirq.Simulator()
-    kc_simulator = cirq.KnowledgeCompilationSimulator(kc_circuit)
-    sv_result = sv_simulator.run(sv_circuit, repetitions=1).measurements['result']
-    kc_result = kc_simulator.run(kc_circuit, repetitions=1).measurements['result']
-    sv_sum_bin = ''.join(sv_result[0][::-1].astype(int).astype(str))
-    kc_sum_bin = ''.join(kc_result[0][::-1].astype(int).astype(str))
-    print ('{} + {} = {}'.format(a_bin, b_bin, sv_sum_bin))
-    print ('{} + {} = {}'.format(a_bin, b_bin, kc_sum_bin))
-    assert sv_sum_bin==kc_sum_bin
+
+    kc_circuit = cirq.Circuit(
+        init_qubits_sym([sympy.Symbol('a_bin'+str(index)) for index in range(n)], *a),
+        init_qubits_sym([sympy.Symbol('b_bin'+str(index)) for index in range(n)], *b),
+        cirq.decompose(Adder(n * 3).on(*qubits)),
+        cirq.measure(*b, key='result')
+    )
+    kc_simulator = cirq.KnowledgeCompilationSimulator(kc_circuit, initial_state=0)
+
+    for p in range(2*2):
+        for q in range(2*2):
+            a_bin = '{:08b}'.format(p)[-n:]
+            b_bin = '{:08b}'.format(q)[-n:]
+
+            a_bin_dict = { 'a_bin'+str(index):a_bin[index] for index in range(n) }
+            b_bin_dict = { 'b_bin'+str(index):b_bin[index] for index in range(n) }
+            param_resolver = cirq.ParamResolver({**a_bin_dict,**b_bin_dict})
+
+            # dm_circuit = cirq.Circuit(
+            #     init_qubits(a_bin, *a),
+            #     init_qubits(b_bin, *b),
+            #     Adder(n * 3).on(*qubits)
+            # )
+            # np.testing.assert_almost_equal(
+            #     cirq.Simulator().simulate(dm_circuit).state_vector(),
+            #     kc_simulator.simulate(kc_circuit,param_resolver=param_resolver).state_vector()
+            # )
+
+            sv_circuit = cirq.Circuit(
+                init_qubits(a_bin, *a),
+                init_qubits(b_bin, *b),
+                Adder(n * 3).on(*qubits),
+                cirq.measure(*b, key='result')
+            )
+            sv_result = cirq.Simulator().run(sv_circuit, repetitions=1).measurements['result']
+            sv_sum_bin = ''.join(sv_result[0][::-1].astype(int).astype(str))
+
+            kc_result = kc_simulator.run(kc_circuit, param_resolver=param_resolver, repetitions=1).measurements['result']
+            kc_sum_bin = ''.join(kc_result[0][::-1].astype(int).astype(str))
+
+            print ('{} + {} = {}'.format(a_bin, b_bin, sv_sum_bin))
+            print ('{} + {} = {}'.format(a_bin, b_bin, kc_sum_bin))
+            assert sv_sum_bin==kc_sum_bin
 
 
-def experiment_multiplier(p, q, n=3):
-    y_bin = '{:08b}'.format(p)[-n:]
-    x_bin = '{:08b}'.format(q)[-n:]
+def experiment_multiplier(n=3):
+
     qubits = cirq.LineQubit.range(5 * n)
     # c = qubits[0:n*3:3]
     # a = qubits[1:n*3:3]
@@ -260,33 +290,55 @@ def experiment_multiplier(p, q, n=3):
     y = qubits[n*3:n*4]
     x = qubits[n*4:]
 
-    circuit = cirq.Circuit(init_qubits(x_bin, *x), init_qubits(y_bin, *y),
-                           Multiplier(5 * n).on(*qubits),
-                           cirq.measure(*b, key='result'))
-    simulator = cirq.Simulator()
-    result = simulator.run(circuit, repetitions=1)
-    sum_bin = ''.join(
-        result.measurements['result'][0][::-1].astype(int).astype(str))
-    print ('{} * {} = {}'.format(y_bin, x_bin, sum_bin))
+    kc_circuit = cirq.Circuit(
+        init_qubits_sym([sympy.Symbol('x_bin'+str(index)) for index in range(n)], *x),
+        init_qubits_sym([sympy.Symbol('y_bin'+str(index)) for index in range(n)], *y),
+        Multiplier(5 * n).on(*qubits),
+        cirq.measure(*b, key='result')
+    )
+    kc_simulator = cirq.KnowledgeCompilationSimulator(kc_circuit, initial_state=0)
 
-
-def main(n=3):
-    print ('Execute Adder')
-    # print(
-    #     cirq.Circuit(
-    #         cirq.decompose(Adder(3 * n).on(*cirq.LineQubit.range(3 * n)))))
     for p in range(2*2):
         for q in range(2*2):
-            experiment_adder(p, q, n)
+            y_bin = '{:08b}'.format(p)[-n:]
+            x_bin = '{:08b}'.format(q)[-n:]
+
+            x_bin_dict = { 'x_bin'+str(index):x_bin[index] for index in range(n) }
+            y_bin_dict = { 'y_bin'+str(index):y_bin[index] for index in range(n) }
+            param_resolver = cirq.ParamResolver({**x_bin_dict,**y_bin_dict})
+
+            dm_circuit = cirq.Circuit(
+                init_qubits(x_bin, *x),
+                init_qubits(y_bin, *y),
+                Multiplier(5 * n).on(*qubits),
+            )
+            # np.testing.assert_almost_equal(
+            #     cirq.Simulator().simulate(dm_circuit).state_vector(),
+            #     kc_simulator.simulate(kc_circuit,param_resolver=param_resolver).state_vector()
+            # )
+
+            sv_circuit = cirq.Circuit(
+                init_qubits(x_bin, *x),
+                init_qubits(y_bin, *y),
+                Multiplier(5 * n).on(*qubits),
+                cirq.measure(*b, key='result')
+            )
+            sv_result = cirq.Simulator().run(sv_circuit, repetitions=1).measurements['result']
+            sv_sum_bin = ''.join(sv_result[0][::-1].astype(int).astype(str))
+
+            kc_result = kc_simulator.run(kc_circuit, param_resolver=param_resolver, repetitions=1).measurements['result']
+            kc_sum_bin = ''.join(kc_result[0][::-1].astype(int).astype(str))
+
+            print ('{} * {} = {}'.format(y_bin, x_bin, sv_sum_bin))
+            print ('{} * {} = {}'.format(y_bin, x_bin, kc_sum_bin))
+            assert sv_sum_bin==kc_sum_bin
+
+def main(n=2):
+    print ('Execute Adder')
+    experiment_adder(n)
     print ('')
     print ('Execute Multiplier')
-    # print(
-    #     cirq.Circuit(
-    #         cirq.decompose(Multiplier(5 * n).on(*cirq.LineQubit.range(5 * n)))))
-    for p in range(2*2):
-        for q in range(2*2):
-            experiment_multiplier(p, q, n)
-
+    experiment_multiplier(n)
 
 if __name__ == '__main__':
     main()

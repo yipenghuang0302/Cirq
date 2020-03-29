@@ -34,79 +34,79 @@ def main():
     #         random_circuit.unitary(),
     #         decimal=4)
 
-    q0,q1 = cirq.LineQubit.range(2)
-    for iteration in range(1):
-        random_circuit = cirq.testing.random_circuit(qubits=[q0,q1],
-                                                     n_moments=3,
-                                                     op_density=0.99)
-        print("random_circuit:")
-        print(random_circuit)
+    # q0,q1,q2 = cirq.LineQubit.range(3)
+    # for iteration in range(3):
+    #     random_circuit = cirq.testing.random_circuit(qubits=[q0,q1,q2],
+    #                                                  n_moments=5,
+    #                                                  op_density=0.99)
+    #     print("random_circuit:")
+    #     print(random_circuit)
+    #
+    #     # noise = cirq.ConstantQubitNoiseModel(cirq.asymmetric_depolarize(0.2,0.3,0.4)) # mixture: size four noise not implemented
+    #     # noise = cirq.ConstantQubitNoiseModel(cirq.depolarize(0.1)) # mixture: size four noise not implemented
+    #
+    #     # noise = cirq.ConstantQubitNoiseModel(cirq.generalized_amplitude_damp(0.1,0.0)) # channel: size four noise not implemented
+    #     # noise = cirq.ConstantQubitNoiseModel(cirq.amplitude_damp(0.1)) # channel:
+    #     noise = cirq.ConstantQubitNoiseModel(cirq.phase_damp(0.1)) # channel:
+    #
+    #     # noise = cirq.ConstantQubitNoiseModel(cirq.phase_flip(0.1)) # mixture: works well
+    #     # noise = cirq.ConstantQubitNoiseModel(cirq.bit_flip(0.1)) # mixture: works well
+    #
+    #     kc_simulator = cirq.KnowledgeCompilationSimulator(random_circuit, noise=noise)
+    #     dm_simulator = cirq.DensityMatrixSimulator(noise=noise)
+    #
+    #     for initial_state in range(4):
+    #
+    #         kc_result = kc_simulator.simulate(random_circuit, initial_state=initial_state)
+    #         # print("kc_result:")
+    #         # print(kc_result)
+    #
+    #         dm_result = dm_simulator.simulate(random_circuit,initial_state=initial_state)
+    #         # print("dm_result:")
+    #         # print(dm_result)
+    #
+    #         np.testing.assert_almost_equal(
+    #             kc_result.final_density_matrix,
+    #             dm_result.final_density_matrix,
+    #             decimal=4)
 
-        noise = cirq.ConstantQubitNoiseModel(cirq.asymmetric_depolarize(0.2,0.3,0.4)) # asymmetric depolarizing
-        # noise = cirq.ConstantQubitNoiseModel(cirq.depolarize(0.5)) # symmetric depolarizing
+    q0 = cirq.LineQubit(0)
 
-        # noise = cirq.ConstantQubitNoiseModel(cirq.generalized_amplitude_damp(0.1,0.0))
-        # noise = cirq.ConstantQubitNoiseModel(cirq.amplitude_damp(0.1))
-        # noise = cirq.ConstantQubitNoiseModel(cirq.phase_damp(0.1))
+    circuit = cirq.Circuit(cirq.H(q0))
+    print("circuit:")
+    print(circuit)
 
-        # noise = cirq.ConstantQubitNoiseModel(cirq.phase_flip(0.5)) # mixture
-        # noise = cirq.ConstantQubitNoiseModel(cirq.bit_flip(0.25)) # mixture
+    # noise = cirq.ConstantQubitNoiseModel(cirq.asymmetric_depolarize(0.25,0.25,0.25)) # asymmetric depolarizing
+    # noise = cirq.ConstantQubitNoiseModel(cirq.depolarize(0.5)) # symmetric depolarizing
 
-        kc_simulator = cirq.KnowledgeCompilationSimulator(random_circuit, noise=noise)
-        dm_simulator = cirq.DensityMatrixSimulator(noise=noise)
+    # noise = cirq.ConstantQubitNoiseModel(cirq.generalized_amplitude_damp(0.1,0.0))
+    noise = cirq.ConstantQubitNoiseModel(cirq.amplitude_damp(0.1))
+    # noise = cirq.ConstantQubitNoiseModel(cirq.phase_damp(0.1))
 
-        for initial_state in range(2):
+    # noise = cirq.ConstantQubitNoiseModel(cirq.phase_flip(0.5)) # mixture
+    # noise = cirq.ConstantQubitNoiseModel(cirq.bit_flip(0.1)) # mixture
 
-            kc_result = kc_simulator.simulate(random_circuit, initial_state=initial_state)
-            print("kc_result:")
-            print(kc_result)
 
-            dm_result = dm_simulator.simulate(random_circuit,initial_state=initial_state)
-            print("dm_result:")
-            print(dm_result)
 
-            np.testing.assert_almost_equal(
-                kc_result.final_density_matrix,
-                dm_result.final_density_matrix,
-                decimal=4)
+    initial_state = 0
 
-    # q0 = cirq.LineQubit(0)
-    #
-    # circuit = cirq.Circuit(cirq.H(q0),cirq.H(q0))
-    # print("circuit:")
-    # print(circuit)
-    #
-    # # noise = cirq.ConstantQubitNoiseModel(cirq.asymmetric_depolarize(0.25,0.25,0.25)) # asymmetric depolarizing
-    # # noise = cirq.ConstantQubitNoiseModel(cirq.depolarize(0.5)) # symmetric depolarizing
-    #
-    # # noise = cirq.ConstantQubitNoiseModel(cirq.generalized_amplitude_damp(0.1,0.0))
-    # # noise = cirq.ConstantQubitNoiseModel(cirq.amplitude_damp(0.1))
-    # # noise = cirq.ConstantQubitNoiseModel(cirq.phase_damp(0.1))
-    #
-    # # noise = cirq.ConstantQubitNoiseModel(cirq.phase_flip(0.5)) # mixture
-    # noise = cirq.ConstantQubitNoiseModel(cirq.bit_flip(0.25)) # mixture
-    #
-    #
-    #
-    # initial_state = 1
-    #
-    # # kc_simulator = cirq.KnowledgeCompilationSimulator(circuit, initial_state=initial_state)
-    # # dm_simulator = cirq.DensityMatrixSimulator()
-    # kc_simulator = cirq.KnowledgeCompilationSimulator(circuit, initial_state=initial_state, intermediate=False, noise=noise)
-    # dm_simulator = cirq.DensityMatrixSimulator(noise=noise)
-    #
-    # kc_result = kc_simulator.simulate(circuit)
-    # print("kc_result:")
-    # print(kc_result)
-    #
-    # dm_result = dm_simulator.simulate(circuit,initial_state=initial_state)
-    # print("dm_result:")
-    # print(dm_result)
-    #
-    # np.testing.assert_almost_equal(
-    #     kc_result.final_density_matrix,
-    #     dm_result.final_density_matrix,
-    #     decimal=4)
+    # kc_simulator = cirq.KnowledgeCompilationSimulator(circuit, initial_state=initial_state)
+    # dm_simulator = cirq.DensityMatrixSimulator()
+    kc_simulator = cirq.KnowledgeCompilationSimulator(circuit, initial_state=initial_state, noise=noise)
+    dm_simulator = cirq.DensityMatrixSimulator(noise=noise)
+
+    kc_result = kc_simulator.simulate(circuit)
+    print("kc_result:")
+    print(kc_result)
+
+    dm_result = dm_simulator.simulate(circuit,initial_state=initial_state)
+    print("dm_result:")
+    print(dm_result)
+
+    np.testing.assert_almost_equal(
+        kc_result.final_density_matrix,
+        dm_result.final_density_matrix,
+        decimal=4)
 
 if __name__ == '__main__':
     main()
