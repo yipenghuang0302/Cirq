@@ -29,6 +29,7 @@ import random
 
 import cirq
 from cirq import H, X, CNOT, measure
+import qsimcirq
 
 
 def main():
@@ -42,17 +43,26 @@ def main():
         ', '.join(str(e) for e in secret_function)))
 
     # Embed the oracle into a quantum circuit querying it exactly once.
-    circuit = make_deutsch_circuit(q0, q1, oracle)
-    print('Circuit:')
-    print(circuit)
+    circuit_no_meas = make_deutsch_circuit(q0, q1, oracle)
+    qs_circuit = qsimcirq.QSimCircuit(circuit_no_meas)
 
     # Simulate the circuit.
     sv_simulator = cirq.Simulator()
+    qs_simulator = qsimcirq.QSimSimulator(qsim_options={'t': 1, 'v': 4})
+
+    sv_result = sv_simulator.simulate(circuit_no_meas)
+    assert sv_result.state_vector().shape == (4,)
+    qs_result = qs_simulator.simulate(qs_circuit)
+    assert qs_result.state_vector().shape == (4,)
+    assert cirq.linalg.allclose_up_to_global_phase(
+        sv_result.state_vector(), qs_result.state_vector())
+
+    circuit = cirq.Circuit( circuit_no_meas, measure(q0, key='result') )
+    print('Circuit:')
+    print(circuit)
     sv_result = sv_simulator.run(circuit)
-
-    kc_simulator = cirq.KnowledgeCompilationSimulator(circuit)
+    kc_simulator = cirq.sim.KnowledgeCompilationSimulator(circuit)
     kc_result = kc_simulator.run(circuit)
-
     assert sv_result==kc_result
 
     print('STATE_VECTOR_SIMULATOR: Result of f(0)⊕f(1):')
@@ -82,7 +92,7 @@ def make_deutsch_circuit(q0, q1, oracle):
     c.append(oracle)
 
     # Measure in X basis.
-    c.append([H(q0), measure(q0, key='result')])
+    c.append(H(q0))
     return c
 
 

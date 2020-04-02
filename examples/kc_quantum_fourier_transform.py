@@ -24,23 +24,43 @@ FinalState
 import numpy as np
 
 import cirq
+import qsimcirq
+
 
 def main():
     """Demonstrates Quantum Fourier transform.
     """
     # Create circuit
     qft_circuit = generate_2x2_grid_qft_circuit()
+    cirq.ConvertToCzAndSingleGates().optimize_circuit(qft_circuit) # cannot work with params
+    cirq.ExpandComposite().optimize_circuit(qft_circuit)
+
     print('Circuit:')
     print(qft_circuit)
+    qsim_circuit = qsimcirq.QSimCircuit(
+        cirq_circuit=qft_circuit,
+        allow_decomposition=True
+    )
+
     # Simulate and collect final_state
-    simulator = cirq.KnowledgeCompilationSimulator(qft_circuit)
-    result = simulator.simulate(qft_circuit)
+    sv_simulator = cirq.Simulator()
+    qs_simulator = qsimcirq.QSimSimulator(qsim_options={'t':16,'v':2})
+    sv_result = sv_simulator.simulate(qft_circuit)
+    qs_result = qs_simulator.simulate(qsim_circuit)
+    assert sv_result.state_vector().shape == (16,)
+    assert qs_result.state_vector().shape == (16,)
+    assert cirq.linalg.allclose_up_to_global_phase(
+        sv_result.state_vector(), qs_result.state_vector())
+
+    kc_simulator = cirq.KnowledgeCompilationSimulator(qft_circuit)
+    kc_result = kc_simulator.simulate(qft_circuit)
     print()
     print('FinalState')
-    print(np.around(result.final_state, 3))
+    print(kc_result.final_density_matrix)
+    print(np.around(kc_result.final_state, 3))
 
 def _cz_and_swap(q0, q1, rot):
-    yield cirq.CZ(q0, q1)**rot
+    yield cirq.decompose(cirq.CZ(q0, q1)**rot)
     yield cirq.SWAP(q0,q1)
 
 # Create a quantum fourier transform circuit for 2*2 planar qubit architecture.

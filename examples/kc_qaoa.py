@@ -62,7 +62,7 @@ from collections import defaultdict
 
 def main(repetitions=1024, maxiter=50):
     # Set problem parameters
-    n = 8 # 6
+    n = 4 # 6
     p = 1
 
     # Generate a random 3-regular graph on n nodes
