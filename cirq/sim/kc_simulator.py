@@ -577,19 +577,6 @@ potential ( {target_posterior} | '''
             pass
         return {k: np.array(v) for k, v in step_result.measurements.items()}
 
-        # for step_result in self._base_iterator(
-        #         param_resolver=param_resolver,
-        #         initial_state=0):
-        #     pass
-        # # We can ignore the mixtures since this is a run method which
-        # # does not return the state.
-        # measurement_ops = [op for _, op, _ in
-        #                    circuit.findall_operations_with_gate_type(
-        #                            ops.MeasurementGate)]
-        # return step_result.sample_measurement_ops(measurement_ops,
-        #                                           repetitions,
-        #                                           seed=self._prng)
-
     def _run_sweep_repeat(
         self,
         circuit: circuits.Circuit,
@@ -801,9 +788,7 @@ potential ( {target_posterior} | '''
                     outputQubitString = 0
                     with open(csv_name, 'r') as csv_file:
                         if hasattr(self, '_repetitions'):
-                            state_vector = []
-                            for outputQubitString in range(1<<self._num_qubits):
-                                state_vector.append(0)
+                            state_vector = np.zeros(1<<self._num_qubits)
                             def tobin(x,s):
                                 return [(x>>k)&1 for k in reversed(range(0,s))]
                             for repetition in range(self._repetitions):
