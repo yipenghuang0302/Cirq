@@ -14,83 +14,90 @@ import matplotlib
 import matplotlib.pyplot as plt
 
 qs_smp_01_time_dict = {}
-qs_smp_02_time_dict = {}
+# qs_smp_02_time_dict = {}
 qs_smp_04_time_dict = {}
-qs_smp_08_time_dict = {}
+# qs_smp_08_time_dict = {}
 qs_smp_16_time_dict = {}
 kc_smp_time_dict = {}
 
 def main():
 
-    grid_points = []
-    for index, length in enumerate( range(2,6) ):
+    for max_length in range(3,8):
+        for steps in range(1,3):
 
-        grid_points.append(length*length)
-        qs_smp_01_time_dict[length*length] = []
-        qs_smp_02_time_dict[length*length] = []
-        qs_smp_04_time_dict[length*length] = []
-        qs_smp_08_time_dict[length*length] = []
-        qs_smp_16_time_dict[length*length] = []
-        kc_smp_time_dict[length*length] = []
+            grid_points = []
+            for length in range(2,max_length):
 
-        trial(length=length,steps=1,repetitions=10000)
+                grid_points.append(length*length)
+                qs_smp_01_time_dict[length*length] = []
+                # qs_smp_02_time_dict[length*length] = []
+                qs_smp_04_time_dict[length*length] = []
+                # qs_smp_08_time_dict[length*length] = []
+                qs_smp_16_time_dict[length*length] = []
+                kc_smp_time_dict[length*length] = []
 
-    qs_smp_01_time_mean = []
-    qs_smp_02_time_mean = []
-    qs_smp_04_time_mean = []
-    qs_smp_08_time_mean = []
-    qs_smp_16_time_mean = []
-    kc_smp_time_mean = []
+                for _ in range(2):
+                    trial(length=length,steps=steps,repetitions=1000)
 
-    qs_smp_01_time_stdev = []
-    qs_smp_02_time_stdev = []
-    qs_smp_04_time_stdev = []
-    qs_smp_08_time_stdev = []
-    qs_smp_16_time_stdev = []
-    kc_smp_time_stdev = []
+            qs_smp_01_time_mean = []
+            # qs_smp_02_time_mean = []
+            qs_smp_04_time_mean = []
+            # qs_smp_08_time_mean = []
+            qs_smp_16_time_mean = []
+            kc_smp_time_mean = []
 
-    for grid_point in grid_points:
+            qs_smp_01_time_stdev = []
+            # qs_smp_02_time_stdev = []
+            qs_smp_04_time_stdev = []
+            # qs_smp_08_time_stdev = []
+            qs_smp_16_time_stdev = []
+            kc_smp_time_stdev = []
 
-        qs_smp_01_time_mean.append(mean(qs_smp_01_time_dict[grid_point]))
-        qs_smp_01_time_stdev.append(stdev(qs_smp_01_time_dict[grid_point]))
+            for grid_point in grid_points:
 
-        qs_smp_02_time_mean.append(mean(qs_smp_02_time_dict[grid_point]))
-        qs_smp_02_time_stdev.append(stdev(qs_smp_02_time_dict[grid_point]))
+                qs_smp_01_time_mean.append(mean(qs_smp_01_time_dict[grid_point]))
+                qs_smp_01_time_stdev.append(stdev(qs_smp_01_time_dict[grid_point]))
 
-        qs_smp_04_time_mean.append(mean(qs_smp_04_time_dict[grid_point]))
-        qs_smp_04_time_stdev.append(stdev(qs_smp_04_time_dict[grid_point]))
+                # qs_smp_02_time_mean.append(mean(qs_smp_02_time_dict[grid_point]))
+                # qs_smp_02_time_stdev.append(stdev(qs_smp_02_time_dict[grid_point]))
 
-        qs_smp_08_time_mean.append(mean(qs_smp_08_time_dict[grid_point]))
-        qs_smp_08_time_stdev.append(stdev(qs_smp_08_time_dict[grid_point]))
+                qs_smp_04_time_mean.append(mean(qs_smp_04_time_dict[grid_point]))
+                qs_smp_04_time_stdev.append(stdev(qs_smp_04_time_dict[grid_point]))
 
-        qs_smp_16_time_mean.append(mean(qs_smp_16_time_dict[grid_point]))
-        qs_smp_16_time_stdev.append(stdev(qs_smp_16_time_dict[grid_point]))
+                # qs_smp_08_time_mean.append(mean(qs_smp_08_time_dict[grid_point]))
+                # qs_smp_08_time_stdev.append(stdev(qs_smp_08_time_dict[grid_point]))
 
-        kc_smp_time_mean.append(mean(kc_smp_time_dict[grid_point]))
-        kc_smp_time_stdev.append(stdev(kc_smp_time_dict[grid_point]))
+                qs_smp_16_time_mean.append(mean(qs_smp_16_time_dict[grid_point]))
+                qs_smp_16_time_stdev.append(stdev(qs_smp_16_time_dict[grid_point]))
+
+                kc_smp_time_mean.append(mean(kc_smp_time_dict[grid_point]))
+                kc_smp_time_stdev.append(stdev(kc_smp_time_dict[grid_point]))
 
 
-    fig = plt.figure(figsize=(10,7))
-    plt.subplots_adjust(left=.2)
-    ax = fig.add_subplot(1, 1, 1)
+            fig = plt.figure(figsize=(12,8))
+            # plt.subplots_adjust(left=.2)
+            ax = fig.add_subplot(1, 1, 1)
 
-    ax.set_title(r'VQE simulation time vs. qubits')
-    ax.set_xlabel('Qubits, representing Ising model grid points')
-    ax.set_ylabel(r'Time (s)')
-    ax.set_yscale('log')
-    ax.errorbar(grid_points, qs_smp_01_time_mean, yerr=qs_smp_01_time_stdev, label='qsim sampling with 1 thread')
-    ax.errorbar(grid_points, qs_smp_02_time_mean, yerr=qs_smp_02_time_stdev, label='qsim sampling with 2 threads')
-    ax.errorbar(grid_points, qs_smp_04_time_mean, yerr=qs_smp_04_time_stdev, label='qsim sampling with 4 threads')
-    ax.errorbar(grid_points, qs_smp_08_time_mean, yerr=qs_smp_08_time_stdev, label='qsim sampling with 8 threads')
-    ax.errorbar(grid_points, qs_smp_16_time_mean, yerr=qs_smp_16_time_stdev, label='qsim sampling with 16 threads')
-    ax.errorbar(grid_points, kc_smp_time_mean, yerr=kc_smp_time_stdev, label='knowledge compilation sampling')
-    ax.legend(loc='upper left', frameon=False)
-    ax.spines['right'].set_visible(True)
-    ax.spines['top'].set_visible(True)
-    plt.show()
+            ax.set_title('VQE simulation time vs. qubits (iterations={})'.format(steps))
+            ax.set_xlabel('Qubits, representing 2D Ising model grid points')
+            ax.set_ylabel('Time (s)')
+            ax.set_yscale('log')
+            ax.grid(linestyle="--", linewidth=0.25, color='.125', zorder=-10)
+            ax.errorbar(grid_points, qs_smp_01_time_mean, yerr=qs_smp_01_time_stdev, color='blue' , marker='x', label='qsim sampling with 1 thread')
+            # ax.errorbar(grid_points, qs_smp_02_time_mean, yerr=qs_smp_02_time_stdev, label='qsim sampling with 2 threads')
+            ax.errorbar(grid_points, qs_smp_04_time_mean, yerr=qs_smp_04_time_stdev, color='cyan' , marker='x', label='qsim sampling with 4 threads')
+            # ax.errorbar(grid_points, qs_smp_08_time_mean, yerr=qs_smp_08_time_stdev, label='qsim sampling with 8 threads')
+            ax.errorbar(grid_points, qs_smp_16_time_mean, yerr=qs_smp_16_time_stdev, color='green', marker='x', label='qsim sampling with 16 threads')
+            ax.errorbar(grid_points, kc_smp_time_mean, yerr=kc_smp_time_stdev, color='red', marker='o', label='knowledge compilation sampling')
+            ax.legend(loc='upper left', frameon=False)
+            ax.spines['right'].set_visible(True)
+            ax.spines['top'].set_visible(True)
+
+            timestr = time.strftime("%Y%m%d-%H%M%S")
+            plt.savefig(fname=timestr+'.pdf', format='pdf')
 
 # define the length of the grid.
-def trial(length=2, steps=1, repetitions=1000, maxiter=4):
+def trial(length=2, steps=1, repetitions=1000, maxiter=2):
 
     h, jr, jc = random_instance(length)
     print('transverse fields: {}'.format(h))
@@ -121,9 +128,9 @@ def trial(length=2, steps=1, repetitions=1000, maxiter=4):
     # sv_sim = cirq.Simulator()
     # dm_simulator = cirq.DensityMatrixSimulator()
     qs_sim_01 = qsimcirq.QSimSimulator( qsim_options={'t': 1, 'v': 0} )
-    qs_sim_02 = qsimcirq.QSimSimulator( qsim_options={'t': 2, 'v': 0} )
+    # qs_sim_02 = qsimcirq.QSimSimulator( qsim_options={'t': 2, 'v': 0} )
     qs_sim_04 = qsimcirq.QSimSimulator( qsim_options={'t': 4, 'v': 0} )
-    qs_sim_08 = qsimcirq.QSimSimulator( qsim_options={'t': 8, 'v': 0} )
+    # qs_sim_08 = qsimcirq.QSimSimulator( qsim_options={'t': 8, 'v': 0} )
     qs_sim_16 = qsimcirq.QSimSimulator( qsim_options={'t':16, 'v': 0} )
     # kc_sim = cirq.KnowledgeCompilationSimulator(cirq_circuit, initial_state=0)
     kc_smp = cirq.KnowledgeCompilationSimulator(meas_circuit, initial_state=0)
@@ -143,9 +150,9 @@ def trial(length=2, steps=1, repetitions=1000, maxiter=4):
         # sv_sim_result = sv_sim.simulate(cirq_circuit, param_resolver=param_resolver)
         # sv_sim_time = time.time() - sv_sim_start
 
-        qs_sim_start = time.time()
-        qs_sim_result = qs_sim_16.simulate(qsim_circuit)
-        qs_sim_time = time.time() - qs_sim_start
+        # qs_sim_start = time.time()
+        # qs_sim_result = qs_sim_16.simulate(qsim_circuit)
+        # qs_sim_time = time.time() - qs_sim_start
 
         # kc_sim_start = time.time()
         # kc_sim_result = kc_sim.simulate(cirq_circuit, param_resolver=param_resolver)
@@ -160,14 +167,14 @@ def trial(length=2, steps=1, repetitions=1000, maxiter=4):
         # assert cirq.linalg.allclose_up_to_global_phase(
         #     sv_sim_result.state_vector(),
         #     qs_sim_result.state_vector(),
-        #     rtol = 1.e-5,
-        #     atol = 1.e-7,
+        #     rtol = 1.e-4,
+        #     atol = 1.e-6,
         # )
         # assert cirq.linalg.allclose_up_to_global_phase(
         #     qs_sim_result.state_vector(),
         #     kc_sim_result.state_vector(),
         #     rtol = 1.e-4,
-        #     atol = 1.e-7,
+        #     atol = 1.e-6,
         # )
 
         # VALIDATE SAMPLING HISTOGRAMS
@@ -181,10 +188,10 @@ def trial(length=2, steps=1, repetitions=1000, maxiter=4):
         # Process histogram
         # sv_histogram = defaultdict(int)
         # for bitstring in sv_bitstrings:
-            # integer = 0
-            # for pos, bit in enumerate(reversed(bitstring)):
-            #     integer += bit<<pos
-            # sv_histogram[integer] += 1
+        #     integer = 0
+        #     for pos, bit in enumerate(reversed(bitstring)):
+        #         integer += bit<<pos
+        #     sv_histogram[integer] += 1
 
         # Process bitstrings
         # sv_value = obj_func(sv_smp_result, h, jr, jc)
@@ -197,20 +204,20 @@ def trial(length=2, steps=1, repetitions=1000, maxiter=4):
         qs_smp_01_time = time.time() - qs_smp_01_start
         qs_smp_01_time_dict[length*length].append(qs_smp_01_time)
 
-        qs_smp_02_start = time.time()
-        qs_smp_02_result = qs_sim_02.run(qsim_circuit, repetitions=repetitions)
-        qs_smp_02_time = time.time() - qs_smp_02_start
-        qs_smp_02_time_dict[length*length].append(qs_smp_02_time)
+        # qs_smp_02_start = time.time()
+        # qs_smp_02_result = qs_sim_02.run(qsim_circuit, repetitions=repetitions)
+        # qs_smp_02_time = time.time() - qs_smp_02_start
+        # qs_smp_02_time_dict[length*length].append(qs_smp_02_time)
 
         qs_smp_04_start = time.time()
         qs_smp_04_result = qs_sim_04.run(qsim_circuit, repetitions=repetitions)
         qs_smp_04_time = time.time() - qs_smp_04_start
         qs_smp_04_time_dict[length*length].append(qs_smp_04_time)
 
-        qs_smp_08_start = time.time()
-        qs_smp_08_result = qs_sim_08.run(qsim_circuit, repetitions=repetitions)
-        qs_smp_08_time = time.time() - qs_smp_08_start
-        qs_smp_08_time_dict[length*length].append(qs_smp_08_time)
+        # qs_smp_08_start = time.time()
+        # qs_smp_08_result = qs_sim_08.run(qsim_circuit, repetitions=repetitions)
+        # qs_smp_08_time = time.time() - qs_smp_08_start
+        # qs_smp_08_time_dict[length*length].append(qs_smp_08_time)
 
         qs_smp_16_start = time.time()
         qs_smp_16_result = qs_sim_16.run(qsim_circuit, repetitions=repetitions)
@@ -251,19 +258,20 @@ def trial(length=2, steps=1, repetitions=1000, maxiter=4):
         kc_value = obj_func(kc_smp_result, h, jr, jc)
         print('Objective value is {}.'.format(kc_value))
 
-
         nonlocal iter
         # PRINT HISTOGRAMS
-        # for index, amplitude in enumerate(sv_sim_result.state_vector()):
-        #     bitstring = format(index,'b').zfill(length*length)
+        # print ('iter,index,bitstring,bitstring_bin,sv_probability,sv_samples,qs_samples,kc_samples')
+        # probabilities = np.zeros(1<<(length*length))
+        # for bitstring, amplitude in enumerate(sv_sim_result.state_vector()):
         #     probability = abs(amplitude) * abs(amplitude)
-        #     print ('iter='+str(iter)+' bitstring='+str(index)+' sv_probability='+str(probability)+' sv_samples='+str(sv_histogram[index]/repetitions)+' qs_samples='+str(qs_histogram[index]/repetitions)+' kc_samples='+str(kc_histogram[index]/repetitions))
+        #     probabilities[bitstring]=probability
+        # sorted_bitstrings = np.argsort(probabilities)
+        # for index, bitstring in enumerate(sorted_bitstrings):
+        #     print (str(iter)+','+str(index)+','+str(bitstring)+','+format(bitstring,'b').zfill(length*length)+','+str(probabilities[bitstring])+','+"{:.6e}".format(sv_histogram[bitstring]/repetitions)+','+"{:.6e}".format(qs_histogram[bitstring]/repetitions)+','+"{:.6e}".format(kc_histogram[bitstring]/repetitions))
 
-        # print ('sv_value='+str(sv_value)+' qs_value='+str(qs_value)+' kc_value='+str(kc_value))
         print ('qs_value='+str(qs_value)+' kc_value='+str(kc_value))
         # print ( 'sv_sim_time='+str(sv_sim_time)+' qs_sim_time='+str(qs_sim_time)+' kc_sim_time='+str(kc_sim_time) )
-        # print ( 'sv_smp_time='+str(sv_smp_time)+' qs_smp_time='+str(qs_smp_time)+' kc_smp_time='+str(kc_smp_time) )
-        print ( 'qs_smp_01_time='+str(qs_smp_01_time)+' qs_smp_02_time='+str(qs_smp_02_time)+' qs_smp_04_time='+str(qs_smp_04_time)+' qs_smp_08_time='+str(qs_smp_08_time)+' qs_smp_16_time='+str(qs_smp_16_time)+' kc_smp_time='+str(kc_smp_time) )
+        print ( 'qs_smp_01_time='+str(qs_smp_01_time)+' qs_smp_04_time='+str(qs_smp_04_time)+' qs_smp_16_time='+str(qs_smp_16_time)+' kc_smp_time='+str(kc_smp_time) )
         print ('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
         iter += 1
         return qs_value

@@ -74,84 +74,86 @@ kc_smp_time_dict = {}
 
 def main(p=1):
 
-    vertices = []
-    for n in range(4,26,2):
+    for max_length in range(6,36,2):
+        for p in range(1,3):
 
-        vertices.append(n)
-        qs_smp_01_time_dict[n] = []
-        # qs_smp_02_time_dict[n] = []
-        qs_smp_04_time_dict[n] = []
-        # qs_smp_08_time_dict[n] = []
-        qs_smp_16_time_dict[n] = []
-        # qh_smp_16_time_dict[n] = []
-        kc_smp_time_dict[n] = []
+            vertices = []
+            for n in range(4,max_length,2):
 
-        for _ in range(2):
-            trial(n=n,p=p,repetitions=1000)
+                vertices.append(n)
+                qs_smp_01_time_dict[n] = []
+                # qs_smp_02_time_dict[n] = []
+                qs_smp_04_time_dict[n] = []
+                # qs_smp_08_time_dict[n] = []
+                qs_smp_16_time_dict[n] = []
+                # qh_smp_16_time_dict[n] = []
+                kc_smp_time_dict[n] = []
 
-    qs_smp_01_time_mean = []
-    # qs_smp_02_time_mean = []
-    qs_smp_04_time_mean = []
-    # qs_smp_08_time_mean = []
-    qs_smp_16_time_mean = []
-    # qh_smp_16_time_mean = []
-    kc_smp_time_mean = []
+                for _ in range(2):
+                    trial(n=n,p=p,repetitions=1000)
 
-    qs_smp_01_time_stdev = []
-    # qs_smp_02_time_stdev = []
-    qs_smp_04_time_stdev = []
-    # qs_smp_08_time_stdev = []
-    qs_smp_16_time_stdev = []
-    # qh_smp_16_time_stdev = []
-    kc_smp_time_stdev = []
+            qs_smp_01_time_mean = []
+            # qs_smp_02_time_mean = []
+            qs_smp_04_time_mean = []
+            # qs_smp_08_time_mean = []
+            qs_smp_16_time_mean = []
+            # qh_smp_16_time_mean = []
+            kc_smp_time_mean = []
 
-    for n in vertices:
+            qs_smp_01_time_stdev = []
+            # qs_smp_02_time_stdev = []
+            qs_smp_04_time_stdev = []
+            # qs_smp_08_time_stdev = []
+            qs_smp_16_time_stdev = []
+            # qh_smp_16_time_stdev = []
+            kc_smp_time_stdev = []
 
-        qs_smp_01_time_mean.append(mean(qs_smp_01_time_dict[n]))
-        qs_smp_01_time_stdev.append(stdev(qs_smp_01_time_dict[n]))
+            for n in vertices:
 
-        # qs_smp_02_time_mean.append(mean(qs_smp_02_time_dict[n]))
-        # qs_smp_02_time_stdev.append(stdev(qs_smp_02_time_dict[n]))
+                qs_smp_01_time_mean.append(mean(qs_smp_01_time_dict[n]))
+                qs_smp_01_time_stdev.append(stdev(qs_smp_01_time_dict[n]))
 
-        qs_smp_04_time_mean.append(mean(qs_smp_04_time_dict[n]))
-        qs_smp_04_time_stdev.append(stdev(qs_smp_04_time_dict[n]))
+                # qs_smp_02_time_mean.append(mean(qs_smp_02_time_dict[n]))
+                # qs_smp_02_time_stdev.append(stdev(qs_smp_02_time_dict[n]))
 
-        # qs_smp_08_time_mean.append(mean(qs_smp_08_time_dict[n]))
-        # qs_smp_08_time_stdev.append(stdev(qs_smp_08_time_dict[n]))
+                qs_smp_04_time_mean.append(mean(qs_smp_04_time_dict[n]))
+                qs_smp_04_time_stdev.append(stdev(qs_smp_04_time_dict[n]))
 
-        qs_smp_16_time_mean.append(mean(qs_smp_16_time_dict[n]))
-        qs_smp_16_time_stdev.append(stdev(qs_smp_16_time_dict[n]))
+                # qs_smp_08_time_mean.append(mean(qs_smp_08_time_dict[n]))
+                # qs_smp_08_time_stdev.append(stdev(qs_smp_08_time_dict[n]))
 
-        # qh_smp_16_time_mean.append(mean(qh_smp_16_time_dict[n]))
-        # qh_smp_16_time_stdev.append(stdev(qh_smp_16_time_dict[n]))
+                qs_smp_16_time_mean.append(mean(qs_smp_16_time_dict[n]))
+                qs_smp_16_time_stdev.append(stdev(qs_smp_16_time_dict[n]))
 
-        kc_smp_time_mean.append(mean(kc_smp_time_dict[n]))
-        kc_smp_time_stdev.append(stdev(kc_smp_time_dict[n]))
+                # qh_smp_16_time_mean.append(mean(qh_smp_16_time_dict[n]))
+                # qh_smp_16_time_stdev.append(stdev(qh_smp_16_time_dict[n]))
+
+                kc_smp_time_mean.append(mean(kc_smp_time_dict[n]))
+                kc_smp_time_stdev.append(stdev(kc_smp_time_dict[n]))
 
 
-    fig = plt.figure(figsize=(12,8))
-    # plt.subplots_adjust(left=.2)
-    ax = fig.add_subplot(1, 1, 1)
+            fig = plt.figure(figsize=(12,8))
+            # plt.subplots_adjust(left=.2)
+            ax = fig.add_subplot(1, 1, 1)
 
-    ax.set_title('QAOA simulation time vs. qubits (iterations={})'.format(p))
-    ax.set_xlabel('Qubits, representing Max-Cut problem vertices')
-    ax.set_ylabel('Time (s)')
-    ax.set_yscale('log')
-    ax.grid(linestyle="--", linewidth=0.25, color='.125', zorder=-10)
-    ax.errorbar(vertices, qs_smp_01_time_mean, yerr=qs_smp_01_time_stdev, color='blue' , marker='x', label='qsim sampling with 1 thread')
-    # ax.errorbar(vertices, qs_smp_02_time_mean, yerr=qs_smp_02_time_stdev, label='qsim sampling with 2 threads')
-    ax.errorbar(vertices, qs_smp_04_time_mean, yerr=qs_smp_04_time_stdev, color='cyan' , marker='x', label='qsim sampling with 4 threads')
-    # ax.errorbar(vertices, qs_smp_08_time_mean, yerr=qs_smp_08_time_stdev, label='qsim sampling with 8 threads')
-    ax.errorbar(vertices, qs_smp_16_time_mean, yerr=qs_smp_16_time_stdev, color='green', marker='x', label='qsim sampling with 16 threads')
-    # ax.errorbar(vertices, qh_smp_16_time_mean, yerr=qh_smp_16_time_stdev, label='qsimh sampling with 16 threads')
-    ax.errorbar(vertices, kc_smp_time_mean, yerr=kc_smp_time_stdev, color='red', marker='o', label='knowledge compilation sampling')
-    ax.legend(loc='upper left', frameon=False)
-    ax.spines['right'].set_visible(True)
-    ax.spines['top'].set_visible(True)
+            ax.set_title('QAOA simulation time vs. qubits (iterations={})'.format(p))
+            ax.set_xlabel('Qubits, representing Max-Cut problem vertices')
+            ax.set_ylabel('Time (s)')
+            ax.set_yscale('log')
+            ax.grid(linestyle="--", linewidth=0.25, color='.125', zorder=-10)
+            ax.errorbar(vertices, qs_smp_01_time_mean, yerr=qs_smp_01_time_stdev, color='blue' , marker='x', label='qsim sampling with 1 thread')
+            # ax.errorbar(vertices, qs_smp_02_time_mean, yerr=qs_smp_02_time_stdev, label='qsim sampling with 2 threads')
+            ax.errorbar(vertices, qs_smp_04_time_mean, yerr=qs_smp_04_time_stdev, color='cyan' , marker='x', label='qsim sampling with 4 threads')
+            # ax.errorbar(vertices, qs_smp_08_time_mean, yerr=qs_smp_08_time_stdev, label='qsim sampling with 8 threads')
+            ax.errorbar(vertices, qs_smp_16_time_mean, yerr=qs_smp_16_time_stdev, color='green', marker='x', label='qsim sampling with 16 threads')
+            # ax.errorbar(vertices, qh_smp_16_time_mean, yerr=qh_smp_16_time_stdev, label='qsimh sampling with 16 threads')
+            ax.errorbar(vertices, kc_smp_time_mean, yerr=kc_smp_time_stdev, color='red', marker='o', label='knowledge compilation sampling')
+            ax.legend(loc='upper left', frameon=False)
+            ax.spines['right'].set_visible(True)
+            ax.spines['top'].set_visible(True)
 
-    timestr = time.strftime("%Y%m%d-%H%M%S")
-    plt.savefig(fname=timestr+'.pdf', format='pdf')
-    plt.show()
+            timestr = time.strftime("%Y%m%d-%H%M%S")
+            plt.savefig(fname=timestr+'.pdf', format='pdf')
 
 # Set problem parameters
 def trial(n=6, p=2, repetitions=1000, maxiter=2):
@@ -169,7 +171,7 @@ def trial(n=6, p=2, repetitions=1000, maxiter=2):
     meas_circuit = cirq.Circuit( cirq_circuit, cirq.measure(*qubits, key='m') )
 
     # Initialize simulators
-    sv_sim = cirq.Simulator()
+    # sv_sim = cirq.Simulator()
     # dm_simulator = cirq.DensityMatrixSimulator()
     qs_sim_01 = qsimcirq.QSimSimulator( qsim_options={'t': 1, 'v': 0} )
     # qs_sim_02 = qsimcirq.QSimSimulator( qsim_options={'t': 2, 'v': 0} )
@@ -380,15 +382,15 @@ def trial(n=6, p=2, repetitions=1000, maxiter=2):
                             options={'maxiter': maxiter})
 
     # Compute best possible cut value via brute force search
-    all_bitstrings = np.array(list(itertools.product(range(2), repeat=n)))
-    all_values = cut_values(all_bitstrings, graph)
-    max_cut_value = np.max(all_values)
+    # all_bitstrings = np.array(list(itertools.product(range(2), repeat=n)))
+    # all_values = cut_values(all_bitstrings, graph)
+    # max_cut_value = np.max(all_values)
 
     # Print the results
     print('The largest cut value found was {}.'.format(qs_largest_cut_value_found))
-    print('The largest possible cut has size {}.'.format(max_cut_value))
-    print('The approximation ratio achieved is {}.'.format(
-        qs_largest_cut_value_found / max_cut_value))
+    # print('The largest possible cut has size {}.'.format(max_cut_value))
+    # print('The approximation ratio achieved is {}.'.format(
+    #     qs_largest_cut_value_found / max_cut_value))
 
 
 def rzz(rads):
