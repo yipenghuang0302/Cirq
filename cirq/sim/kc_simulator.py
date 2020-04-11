@@ -157,7 +157,7 @@ potential ( {target_posterior} | '''
 
     net_prelude_noise = \
 '''node {target_posterior} {{
-    states = ("M_0" "M_1");
+    states = ("M_0" "M_1" "M_2" "M_3");
     subtype = depolarize;
 }}
 potential ( {target_posterior} | '''
@@ -240,7 +240,7 @@ potential ( {target_posterior} | '''
             if not self._intermediate: # messes up moment steps, moment step samping
                 optimizers.ExpandComposite().optimize_circuit(circuit)
                 # optimizers.ConvertToCzAndSingleGates().optimize_circuit(circuit) # cannot work with params
-                # optimizers.MergeInteractions().optimize_circuit(circuit) # generally okay, but may cause test_simulate_random_unitary to fail due to small circuit sizes
+                optimizers.MergeInteractions().optimize_circuit(circuit) # generally okay, but may cause test_simulate_random_unitary to fail due to small circuit sizes
                 optimizers.MergeSingleQubitGates().optimize_circuit(circuit)
                 optimizers.DropEmptyMoments().optimize_circuit(circuit)
                 optimizers.EjectPhasedPaulis().optimize_circuit(circuit)
@@ -374,7 +374,7 @@ potential ( {target_posterior} | '''
                     rv_node_string = self.net_prelude_noise
                     rv_node_string += self.net_interlude
                     rv_node_string += '( '
-                    for index in range(2):
+                    for index in range(4):
                         if index<len(protocols.mixture(op)):
                             component = protocols.mixture(op)[index]
                             rv_node_string += self._to_cpp_complex_hash(cmath.sqrt(component[0])) + ' '
@@ -394,7 +394,7 @@ potential ( {target_posterior} | '''
                     parents.append(parent)
                     node_string += self.net_interlude
                     node_string += '( '
-                    for index in range(2):
+                    for index in range(4):
                         if index<len(protocols.mixture(op)):
                             component = protocols.mixture(op)[index]
                             node_string += self._net_data_format(parents,0).format(data=self._cpt_to_cpp_complex_hash(component[1]))
@@ -816,7 +816,7 @@ potential ( {target_posterior} | '''
                                             # print(measurements)
                                             measurements[key].append(corrected)
                         else:
-                            for noiseString in range(1<<self._num_noise):
+                            for noiseString in range(1<<(2*self._num_noise)):
                                 # print("noiseString")
                                 # print(noiseString)
                                 state_vector = []
