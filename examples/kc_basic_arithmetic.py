@@ -312,10 +312,10 @@ def experiment_multiplier(n=3):
                 init_qubits(y_bin, *y),
                 Multiplier(5 * n).on(*qubits),
             )
-            # np.testing.assert_almost_equal(
-            #     cirq.Simulator().simulate(dm_circuit).state_vector(),
-            #     kc_simulator.simulate(kc_circuit,param_resolver=param_resolver).state_vector()
-            # )
+            np.testing.assert_almost_equal(
+                cirq.Simulator().simulate(dm_circuit).state_vector(),
+                kc_simulator.simulate(kc_circuit,param_resolver=param_resolver).state_vector()
+            )
 
             sv_circuit = cirq.Circuit(
                 init_qubits(x_bin, *x),

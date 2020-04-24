@@ -62,24 +62,26 @@ import cirq
 from statistics import mean, stdev
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
+rcParams.update({'figure.autolayout': True})
 
 dm_smp_time_dict = {}
 kc_smp_time_dict = {}
 
 def main():
 
-    for max_length in range(14,16,2): #36
-        for p in range(1,2):
+    for max_length in range(10,14,2): #36
+        for p in range(1,3):
 
             vertices = []
-            for n in range(12,max_length,2):
+            for n in range(4,max_length,2):
 
                 vertices.append(n)
                 dm_smp_time_dict[n] = []
                 kc_smp_time_dict[n] = []
 
-                for _ in range(1):
-                    trial(n=n,p=p,repetitions=10000)
+                for _ in range(2):
+                    trial(n=n,p=p,repetitions=1000)
 
             dm_smp_time_mean = []
             kc_smp_time_mean = []
@@ -95,11 +97,11 @@ def main():
                 kc_smp_time_mean.append(mean(kc_smp_time_dict[n]))
                 kc_smp_time_stdev.append(stdev(kc_smp_time_dict[n]))
 
-            fig = plt.figure(figsize=(12,8))
+            fig = plt.figure(figsize=(5,3))
             # plt.subplots_adjust(left=.2)
             ax = fig.add_subplot(1, 1, 1)
 
-            ax.set_title('QAOA simulation time vs. qubits (iterations={})'.format(p))
+            ax.set_title('Noisy QAOA simulation time vs. qubits (iterations={})'.format(p))
             ax.set_xlabel('Qubits, representing Max-Cut problem vertices')
             ax.set_ylabel('Time (s)')
             ax.set_yscale('log')
@@ -114,7 +116,7 @@ def main():
             plt.savefig(fname=timestr+'.pdf', format='pdf')
 
 # Set problem parameters
-def trial(n=6, p=2, repetitions=1000, maxiter=50):
+def trial(n=6, p=2, repetitions=1000, maxiter=2):
 
     # Generate a random 3-regular graph on n nodes
     graph = networkx.random_regular_graph(3, n)
@@ -233,17 +235,17 @@ def trial(n=6, p=2, repetitions=1000, maxiter=50):
 
         nonlocal iter
         # PRINT HISTOGRAMS
-        print ('iter,index,bitstring,bitstring_bin,dm_probability,dm_samples,kc_samples')
-        probabilities = np.zeros(1<<n)
-        for bitstring, probability in enumerate(cirq.sim.density_matrix_utils._probs(
-            dm_sim_result.final_density_matrix,
-            [index for index in range(n)],
-            cirq.protocols.qid_shape(qubits)
-        )):
-            probabilities[bitstring]=probability
-        sorted_bitstrings = np.argsort(probabilities)
-        for index, bitstring in enumerate(sorted_bitstrings):
-            print (str(iter)+','+str(index)+','+str(bitstring)+','+format(bitstring,'b').zfill(n)+','+str(probabilities[bitstring])+','+"{:.6e}".format(dm_histogram[bitstring]/repetitions)+','+"{:.6e}".format(kc_histogram[bitstring]/repetitions))
+        # print ('iter,index,bitstring,bitstring_bin,dm_probability,dm_samples,kc_samples')
+        # probabilities = np.zeros(1<<n)
+        # for bitstring, probability in enumerate(cirq.sim.density_matrix_utils._probs(
+        #     dm_sim_result.final_density_matrix,
+        #     [index for index in range(n)],
+        #     cirq.protocols.qid_shape(qubits)
+        # )):
+        #     probabilities[bitstring]=probability
+        # sorted_bitstrings = np.argsort(probabilities)
+        # for index, bitstring in enumerate(sorted_bitstrings):
+        #     print (str(iter)+','+str(index)+','+str(bitstring)+','+format(bitstring,'b').zfill(n)+','+str(probabilities[bitstring])+','+"{:.6e}".format(dm_histogram[bitstring]/repetitions)+','+"{:.6e}".format(kc_histogram[bitstring]/repetitions))
 
         print ('dm_mean='+str(dm_mean)+' kc_mean='+str(kc_mean))
         # print ( 'dm_sim_time='+str(dm_sim_time)+' kc_sim_time='+str(kc_sim_time) )

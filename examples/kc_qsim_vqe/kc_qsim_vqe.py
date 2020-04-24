@@ -12,6 +12,8 @@ import qsimcirq
 from statistics import mean, stdev
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
+rcParams.update({'figure.autolayout': True})
 
 qs_smp_01_time_dict = {}
 # qs_smp_02_time_dict = {}
@@ -22,7 +24,7 @@ kc_smp_time_dict = {}
 
 def main():
 
-    for max_length in range(3,8):
+    for max_length in range(5,7):
         for steps in range(1,3):
 
             grid_points = []
@@ -74,7 +76,7 @@ def main():
                 kc_smp_time_stdev.append(stdev(kc_smp_time_dict[grid_point]))
 
 
-            fig = plt.figure(figsize=(12,8))
+            fig = plt.figure(figsize=(5,3))
             # plt.subplots_adjust(left=.2)
             ax = fig.add_subplot(1, 1, 1)
 

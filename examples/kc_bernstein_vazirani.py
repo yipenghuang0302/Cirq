@@ -44,7 +44,7 @@ import cirq
 
 
 def main(qubit_count = 8):
-    circuit_sample_count = 3
+    circuit_sample_count = 300
 
     # Choose qubits to use.
     input_qubits = cirq.LineQubit.range(qubit_count) # [cirq.GridQubit(i, 0) for i in range(qubit_count)]

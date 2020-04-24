@@ -56,6 +56,8 @@ def main():
     kc_result = kc_simulator.simulate(qft_circuit)
     print()
     print('FinalState')
+    assert cirq.linalg.allclose_up_to_global_phase(
+        sv_result.state_vector(), kc_result.state_vector())
     print(kc_result.final_density_matrix)
     print(np.around(kc_result.final_state, 3))
 

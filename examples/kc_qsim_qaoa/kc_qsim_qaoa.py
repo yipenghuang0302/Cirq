@@ -63,6 +63,8 @@ import qsimcirq
 from statistics import mean, stdev
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
+rcParams.update({'figure.autolayout': True})
 
 qs_smp_01_time_dict = {}
 # qs_smp_02_time_dict = {}
@@ -74,7 +76,7 @@ kc_smp_time_dict = {}
 
 def main(p=1):
 
-    for max_length in range(6,36,2):
+    for max_length in range(28,32,2):
         for p in range(1,3):
 
             vertices = []
@@ -132,7 +134,7 @@ def main(p=1):
                 kc_smp_time_stdev.append(stdev(kc_smp_time_dict[n]))
 
 
-            fig = plt.figure(figsize=(12,8))
+            fig = plt.figure(figsize=(5,3))
             # plt.subplots_adjust(left=.2)
             ax = fig.add_subplot(1, 1, 1)
 
