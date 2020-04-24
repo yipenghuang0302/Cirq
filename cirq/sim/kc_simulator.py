@@ -148,16 +148,9 @@ class KnowledgeCompilationSimulator(simulator.SimulatesSamples,
 }}
 potential ( {target_posterior} | '''
 
-#     net_prelude_boolean = \
-# '''node {target_posterior} {{
-#     states = ("0" "1");
-#     subtype = boolean;
-# }}
-# potential ( {target_posterior} | '''
-
     net_prelude_noise = \
 '''node {target_posterior} {{
-    states = ("M_0" "M_1" "M_2" "M_3");
+    states = ("0" "1" "2" "3");
     subtype = depolarize;
 }}
 potential ( {target_posterior} | '''
@@ -238,15 +231,15 @@ potential ( {target_posterior} | '''
 
         for _ in range(2):
             if not self._intermediate: # messes up moment steps, moment step samping
-                optimizers.ExpandComposite().optimize_circuit(circuit)
+                optimizers.ExpandComposite().optimize_circuit(circuit) # seems to actually increase BN size
                 # optimizers.ConvertToCzAndSingleGates().optimize_circuit(circuit) # cannot work with params
-                optimizers.MergeInteractions().optimize_circuit(circuit) # generally okay, but may cause test_simulate_random_unitary to fail due to small circuit sizes
+                # optimizers.MergeInteractions().optimize_circuit(circuit) # generally okay, but may cause test_simulate_random_unitary to fail due to small circuit sizes
                 optimizers.MergeSingleQubitGates().optimize_circuit(circuit)
                 optimizers.DropEmptyMoments().optimize_circuit(circuit)
                 optimizers.EjectPhasedPaulis().optimize_circuit(circuit)
                 # optimizers.SynchronizeTerminalMeasurements().optimize_circuit(circuit)
                 pass
-            # optimizers.EjectZ().optimize_circuit(circuit) # incompatible with noise simulation
+            optimizers.EjectZ().optimize_circuit(circuit) # incompatible with noise simulation
             # optimizers.DropNegligible().optimize_circuit(circuit)
 
         self._circuit = circuit
@@ -264,7 +257,6 @@ potential ( {target_posterior} | '''
         self._initial_state_lockout = False if initial_state is None else True
         # generate Bayesian network nodes with no priors for qubit initialization
         qubit_to_last_moment_index = {}
-        noisy_moments = set()
         actual_initial_state = 0 if initial_state is None else initial_state
         for target_qubit, initial_value in zip (
             self._qubits,
@@ -309,64 +301,89 @@ potential ( {target_posterior} | '''
                 if isinstance (op.gate,ops.PhaseDampingChannel):
                     self._num_noise += 1
 
-                    rv_node_string = self.net_prelude_noise + self.net_interlude
-                    rv_node_string += '( ' + self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)) + ' ' + self._to_cpp_complex_hash(cmath.sqrt(op.gate.gamma)) + ' )'
-                    rv_node_string += self.net_postlude
+                    anc_node_string = self.net_prelude_qubit + self.net_interlude
+                    anc_node_string += '( 1 0 )'
+                    anc_node_string += self.net_postlude
 
                     qubit = op.qubits[0]
 
-                    node_string = self.net_prelude_qubit
-                    node_string += '{target_posterior}_rv '
+                    rv_node_string = self.net_prelude_noise
                     depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
                     parent = 'n' + depth + 'q' + str(qubit).zfill(4)
+                    rv_node_string += parent + ' '
+                    rv_node_string += '{target_posterior}_anc '
+                    rv_node_string += self.net_interlude
+                    rv_node_string += '( '
+                    rv_node_string += '((1 0 0 0)(0 1 0 0)) ((+{cos_term} -{sin_term} 0 0)(+{sin_term} +{cos_term} 0 0)) '
+                    rv_node_string += ')'
+                    rv_node_string += self.net_postlude
+
+                    node_string = self.net_prelude_qubit
                     node_string += parent + ' '
                     node_string += self.net_interlude
                     node_string += '( '
-                    node_string += '((1 0)(0 1)) ((1 0)(0 -1)) '
+                    node_string += '(1 0)(0 1) '
                     node_string += ')'
                     node_string += self.net_postlude
 
                     target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
+                    net_file.write(anc_node_string.format(
+                        target_posterior=target_posterior+'_rv_anc',
+                        ))
                     net_file.write(rv_node_string.format(
                         target_posterior=target_posterior+'_rv',
+                        cos_term=self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)),
+                        sin_term=self._to_cpp_complex_hash(cmath.sqrt(  op.gate.gamma))
                         ))
                     net_file.write(node_string.format(
-                        target_posterior=target_posterior,
+                        target_posterior=target_posterior
                         ))
 
                     qubit_to_last_moment_index[qubit] = moment_index
-                    noisy_moments.add(moment_index)
 
                 elif isinstance (op.gate,ops.AmplitudeDampingChannel):
                     self._num_noise += 1
 
-                    rv_node_string = self.net_prelude_noise + self.net_interlude
-                    rv_node_string += '( ' + self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)) + ' ' + self._to_cpp_complex_hash(cmath.sqrt(op.gate.gamma)) + ' )'
-                    rv_node_string += self.net_postlude
+                    anc_node_string = self.net_prelude_qubit + self.net_interlude
+                    anc_node_string += '( 1 0 )'
+                    anc_node_string += self.net_postlude
 
                     qubit = op.qubits[0]
 
-                    node_string = self.net_prelude_qubit
-                    node_string += '{target_posterior}_rv '
+                    rv_node_string = self.net_prelude_noise
                     depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
                     parent = 'n' + depth + 'q' + str(qubit).zfill(4)
+                    rv_node_string += parent + ' '
+                    rv_node_string += '{target_posterior}_anc '
+                    rv_node_string += self.net_interlude
+                    rv_node_string += '( '
+                    rv_node_string += '((1 0 0 0)(0 1 0 0)) ((+{cos_term} -{sin_term} 0 0)(+{sin_term} +{cos_term} 0 0)) '
+                    rv_node_string += ')'
+                    rv_node_string += self.net_postlude
+
+                    node_string = self.net_prelude_qubit
+                    node_string += '{target_posterior}_rv '
                     node_string += parent + ' '
                     node_string += self.net_interlude
                     node_string += '( '
-                    node_string += '((1 0)(0 1)) ((1 0)(1 0)) '
+                    node_string += '((1 0)(0 1)) ((0 1)(1 0)) ((1 0)(0 1)) ((1 0)(0 1))'
                     node_string += ')'
                     node_string += self.net_postlude
 
                     target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
+                    net_file.write(anc_node_string.format(
+                        target_posterior=target_posterior+'_rv_anc',
+                        ))
                     net_file.write(rv_node_string.format(
                         target_posterior=target_posterior+'_rv',
+                        cos_term=self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)),
+                        sin_term=self._to_cpp_complex_hash(cmath.sqrt(  op.gate.gamma))
                         ))
                     net_file.write(node_string.format(
-                        target_posterior=target_posterior,
+                        target_posterior=target_posterior
                         ))
 
                     qubit_to_last_moment_index[qubit] = moment_index
-                    noisy_moments.add(moment_index)
 
                 elif protocols.has_mixture(op):
                     self._num_noise += 1
@@ -413,7 +430,6 @@ potential ( {target_posterior} | '''
                         ))
 
                     qubit_to_last_moment_index[qubit] = moment_index
-                    noisy_moments.add(moment_index)
 
                 elif not isinstance(op.gate,ops.MeasurementGate):
 
@@ -470,7 +486,7 @@ potential ( {target_posterior} | '''
             stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -b -i circuit.net -w -s')
             # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e and -b used together causes moment steps simulation to fail
-            # -c is incompatible with sparse_simulator tests on test_run_mixture_with_gates
+            # -c incompatible with noise mixtures becausethere is no mutal exclusive constraints on noise possibilities
         # print (stdout)
 
         self._node_re_compile = re.compile(r'cc\$I\$(\d+)\$1.0\$\+\$n(\d+)q(\d+)\$') # are negative literals and opt bool valid?
@@ -486,7 +502,7 @@ potential ( {target_posterior} | '''
                         if match:
                             moment = int(match.group(2))
                             qubit = self._qubits[int(match.group(3))]
-                            if moment<qubit_to_last_moment_index[qubit] and moment not in noisy_moments:
+                            if moment<qubit_to_last_moment_index[qubit]:
                                 existentially_quantified_variables.append(match.group(1))
 
         if not self._intermediate:
