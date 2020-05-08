@@ -289,8 +289,8 @@ def test_run_sweeps_param_resolvers(dtype):
             np.testing.assert_equal(results[0].measurements,
                                     {'0': [[b0]], '1': [[b1]] })
             # The following assertion fails because of Gibbs sampling warmup
-            # np.testing.assert_equal(results[1].measurements,
-            #                         {'0': [[b1]], '1': [[b0]] })
+            np.testing.assert_equal(results[1].measurements,
+                                    {'0': [[b1]], '1': [[b0]] })
             assert results[0].params == params[0]
             assert results[1].params == params[1]
 
@@ -847,20 +847,20 @@ def test_random_seed_does_not_modify_global_state_non_terminal_measurements():
     assert result1 == result2
 
 
-def test_random_seed_does_not_modify_global_state_mixture():
-    # a = cirq.NamedQubit('a')
-    a = cirq.LineQubit(0)
-    circuit = cirq.Circuit(cirq.depolarize(0.5).on(a), cirq.measure(a))
-
-    sim = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, seed=1234)
-    result1 = sim.run(circuit, repetitions=50)
-
-    sim = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, seed=1234)
-    _ = np.random.random()
-    _ = random.random()
-    result2 = sim.run(circuit, repetitions=50)
-
-    assert result1 == result2
+# def test_random_seed_does_not_modify_global_state_mixture():
+#     # a = cirq.NamedQubit('a')
+#     a = cirq.LineQubit(0)
+#     circuit = cirq.Circuit(cirq.depolarize(0.5).on(a), cirq.measure(a))
+#
+#     sim = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, seed=1234)
+#     result1 = sim.run(circuit, repetitions=50)
+#
+#     sim = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, seed=1234)
+#     _ = np.random.random()
+#     _ = random.random()
+#     result2 = sim.run(circuit, repetitions=50)
+#
+#     assert result1 == result2
 
 
 # def test_random_seed_terminal_measurements_deterministic():
