@@ -21,7 +21,7 @@ from typing import Any, Dict, Iterator, List, Type, Sequence, Union
 import numbers, cmath, sympy
 import numpy as np
 
-from cirq import circuits, ops, protocols, study, optimizers, value, devices
+from cirq import circuits, ops, protocols, qis, study, optimizers, value, devices
 from cirq.sim import simulator, wave_function, density_matrix_utils, wave_function_simulator, sparse_simulator, density_matrix_simulator
 
 import os, subprocess, re, csv, sys, time
@@ -209,7 +209,7 @@ potential ( {target_posterior} | '''
         intermediate: bool = False, # whether or not moment steps, intermediate measurement allowed.
         dtype: Type[np.number] = np.complex64,
         noise: 'cirq.NOISE_MODEL_LIKE' = None,
-        seed: value.RANDOM_STATE_LIKE = None,
+        seed: 'cirq.RANDOM_STATE_OR_SEED_LIKE' = None,
         ignore_measurement_results: bool = False):
         """A sparse matrix simulator.
 
@@ -229,9 +229,9 @@ potential ( {target_posterior} | '''
         circuit = (program if isinstance(program, circuits.Circuit) else program.to_circuit())
         circuit = circuits.Circuit(self._noise.noisy_moments(circuit, sorted(circuit.all_qubits())))
 
-        for _ in range(2):
+        for _ in range(1):
             if not self._intermediate: # messes up moment steps, moment step samping
-                optimizers.ExpandComposite().optimize_circuit(circuit) # seems to actually increase BN size
+                # optimizers.ExpandComposite().optimize_circuit(circuit) # seems to actually increase BN size
                 # optimizers.ConvertToCzAndSingleGates().optimize_circuit(circuit) # cannot work with params
                 # optimizers.MergeInteractions().optimize_circuit(circuit) # generally okay, but may cause test_simulate_random_unitary to fail due to small circuit sizes
                 optimizers.MergeSingleQubitGates().optimize_circuit(circuit)
@@ -301,9 +301,6 @@ potential ( {target_posterior} | '''
                 if isinstance (op.gate,ops.PhaseDampingChannel):
                     self._num_noise += 1
 
-                    anc_node_string = self.net_prelude_qubit + self.net_interlude
-                    anc_node_string += '( 1 0 )'
-                    anc_node_string += self.net_postlude
 
                     qubit = op.qubits[0]
 
@@ -311,58 +308,36 @@ potential ( {target_posterior} | '''
                     depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
                     parent = 'n' + depth + 'q' + str(qubit).zfill(4)
                     rv_node_string += parent + ' '
-                    rv_node_string += '{target_posterior}_anc '
                     rv_node_string += self.net_interlude
                     rv_node_string += '( '
-                    rv_node_string += '((1 0 0 0)(0 1 0 0)) ((+{cos_term} -{sin_term} 0 0)(+{sin_term} +{cos_term} 0 0)) '
+                    rv_node_string += '(1 0 0 0) (+{cos_term} -{sin_term} 0 0) '
                     rv_node_string += ')'
                     rv_node_string += self.net_postlude
 
-                    node_string = self.net_prelude_qubit
-                    node_string += parent + ' '
-                    node_string += self.net_interlude
-                    node_string += '( '
-                    node_string += '(1 0)(0 1) '
-                    node_string += ')'
-                    node_string += self.net_postlude
-
                     target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
-                    net_file.write(anc_node_string.format(
-                        target_posterior=target_posterior+'_rv_anc',
-                        ))
                     net_file.write(rv_node_string.format(
-                        target_posterior=target_posterior+'_rv',
+                        target_posterior='rv_'+target_posterior,
                         cos_term=self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)),
                         sin_term=self._to_cpp_complex_hash(cmath.sqrt(  op.gate.gamma))
                         ))
-                    net_file.write(node_string.format(
-                        target_posterior=target_posterior
-                        ))
-
-                    qubit_to_last_moment_index[qubit] = moment_index
 
                 elif isinstance (op.gate,ops.AmplitudeDampingChannel):
                     self._num_noise += 1
 
-                    anc_node_string = self.net_prelude_qubit + self.net_interlude
-                    anc_node_string += '( 1 0 )'
-                    anc_node_string += self.net_postlude
-
                     qubit = op.qubits[0]
 
                     rv_node_string = self.net_prelude_noise
                     depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
                     parent = 'n' + depth + 'q' + str(qubit).zfill(4)
                     rv_node_string += parent + ' '
-                    rv_node_string += '{target_posterior}_anc '
                     rv_node_string += self.net_interlude
                     rv_node_string += '( '
-                    rv_node_string += '((1 0 0 0)(0 1 0 0)) ((+{cos_term} -{sin_term} 0 0)(+{sin_term} +{cos_term} 0 0)) '
+                    rv_node_string += '(1 0 0 0) (+{cos_term} -{sin_term} 0 0) '
                     rv_node_string += ')'
                     rv_node_string += self.net_postlude
 
                     node_string = self.net_prelude_qubit
-                    node_string += '{target_posterior}_rv '
+                    node_string += 'rv_{target_posterior} '
                     node_string += parent + ' '
                     node_string += self.net_interlude
                     node_string += '( '
@@ -371,11 +346,8 @@ potential ( {target_posterior} | '''
                     node_string += self.net_postlude
 
                     target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
-                    net_file.write(anc_node_string.format(
-                        target_posterior=target_posterior+'_rv_anc',
-                        ))
                     net_file.write(rv_node_string.format(
-                        target_posterior=target_posterior+'_rv',
+                        target_posterior='rv_'+target_posterior,
                         cos_term=self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)),
                         sin_term=self._to_cpp_complex_hash(cmath.sqrt(  op.gate.gamma))
                         ))
@@ -403,7 +375,7 @@ potential ( {target_posterior} | '''
                     qubit = op.qubits[0]
 
                     node_string = self.net_prelude_qubit
-                    node_string += '{target_posterior}_rv '
+                    node_string += 'rv_{target_posterior} '
                     parents=[]
                     depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
                     parent = 'n' + depth + 'q' + str(qubit).zfill(4)
@@ -423,7 +395,7 @@ potential ( {target_posterior} | '''
 
                     target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
                     net_file.write(rv_node_string.format(
-                        target_posterior=target_posterior+'_rv',
+                        target_posterior='rv_'+target_posterior,
                         ))
                     net_file.write(node_string.format(
                         target_posterior=target_posterior,
@@ -483,13 +455,13 @@ potential ( {target_posterior} | '''
             # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e: Equal probabilities are encoded is incompatible with dtbnorders
         else:
-            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -b -i circuit.net -w -s')
+            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -c -d -a -b -i circuit.net -w -s')
             # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e and -b used together causes moment steps simulation to fail
             # -c incompatible with noise mixtures becausethere is no mutal exclusive constraints on noise possibilities
         # print (stdout)
 
-        self._node_re_compile = re.compile(r'cc\$I\$(\d+)\$1.0\$\+\$n(\d+)q(\d+)\$') # are negative literals and opt bool valid?
+        self._node_re_compile = re.compile(r'cc\$I\$(\d+)\$1.0\$X\$n(\d+)q(\d+)\$') # are negative literals and opt bool valid?
         self._int_re_compile = re.compile(r'cc\$C\$\d+\$(\d+)')
         existentially_quantified_variables = []
         with open('circuit.net.cnf', 'r') as cnf_file:
@@ -515,13 +487,13 @@ potential ( {target_posterior} | '''
         try:
             # Conjunctive normal form to arithmetic circuit
             bestFileSize = sys.maxsize
-            for _ in range(4):
+            for _ in range(1):
                 stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -simplify_s -in circuit.net.cnf -visualize')
                 if not self._intermediate:
-                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -exist variables.file -reduce -suppress_ane -in circuit.net.cnf_simplified -visualize')
+                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 2 -exist variables.file -reduce -in circuit.net.cnf_simplified -smooth -visualize')
                     # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -exist variables.file -reduce -in circuit.net.cnf_simplified -minimize -suppress_ane -determined circuit.net.pmap')
                 else:
-                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -reduce -in circuit.net.cnf_simplified -visualize')
+                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3                       -reduce -in circuit.net.cnf_simplified -smooth -visualize')
                 # stdout = os.system('/n/fs/qdb/qACE/miniC2D-1.0.0/bin/linux/miniC2D -c circuit.net.cnf_simplified')
                 # print (stdout)
                 currFileSize = os.path.getsize('circuit.net.cnf_simplified.nnf')
@@ -532,7 +504,7 @@ potential ( {target_posterior} | '''
 
             # Build the evaluator for the arithmetic circuit
             stdout = os.system('mkdir evaluator')
-            stdout = os.system('javac -d evaluator -cp /n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar -Xlint:unchecked /n/fs/qdb/Google/Cirq/cirq/sim/Evaluator.java /n/fs/qdb/qACE/org/apache/commons/math3/complex/ComplexFormat.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngine.java /n/fs/qdb/qACE/aceEvalComplexSrc/Calculator.java /n/fs/qdb/qACE/aceEvalComplexSrc/Evidence.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngineSop.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorNormal.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorLogE.java /n/fs/qdb/qACE/aceEvalComplexSrc/UnderflowException.java')
+            stdout = os.system('javac -d evaluator -cp /n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar -Xlint:unchecked /n/fs/qdb/Google/Cirq/cirq/sim/Evaluator.java /n/fs/qdb/qACE/org/apache/commons/math3/complex/ComplexFormat.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngine.java /n/fs/qdb/qACE/aceEvalComplexSrc/Calculator.java /n/fs/qdb/qACE/aceEvalComplexSrc/Evidence.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngineMixed.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorNormal.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorLogE.java /n/fs/qdb/qACE/aceEvalComplexSrc/UnderflowException.java')
             # print (stdout)
 
             # Launch the evaluator in a subprocess
@@ -658,6 +630,8 @@ potential ( {target_posterior} | '''
             List of SimulationTrialResults for this run, one for each
             possible parameter resolver.
         """
+        if hasattr(self,'_repetitions'):
+            delattr(self,'_repetitions')
         self._simulate_sweep_flag = None
         return simulator.SimulatesIntermediateState.simulate_sweep(
             self,
@@ -700,20 +674,20 @@ potential ( {target_posterior} | '''
         # print(param_resolver)
 
         if len(self._circuit) == 0:
-            # yield sparse_simulator.SparseSimulatorStep(
-            #     wave_function.to_valid_state_vector(initial_state,self._num_qubits,dtype=self._dtype),
-            #     {},
-            #     self._qubit_map,
-            #     self._dtype)
-            yield density_matrix_simulator.DensityMatrixStepResult(
-                density_matrix=density_matrix_utils.to_valid_density_matrix(
-                    initial_state,
-                    self._num_qubits,
-                    qid_shape=protocols.qid_shape(self._qubits),
-                    dtype=self._dtype),
-                measurements={},
-                qubit_map=self._qubit_map,
-                dtype=self._dtype)
+            yield sparse_simulator.SparseSimulatorStep(
+                qis.to_valid_state_vector(initial_state,self._num_qubits,dtype=self._dtype),
+                {},
+                self._qubit_map,
+                self._dtype)
+            # yield density_matrix_simulator.DensityMatrixStepResult(
+            #     density_matrix=qis.to_valid_density_matrix(
+            #         initial_state,
+            #         self._num_qubits,
+            #         qid_shape=protocols.qid_shape(self._qubits),
+            #         dtype=self._dtype),
+            #     measurements={},
+            #     qubit_map=self._qubit_map,
+            #     dtype=self._dtype)
 
         else:
 
@@ -780,8 +754,10 @@ potential ( {target_posterior} | '''
 
                             if self._intermediate:
                                 match = self._node_re_compile.match(line)
-                                if match and int(match.group(2))>moment_index:
-                                    line = re.sub(r'\+', 'I', line)
+                                if match and int(match.group(2))<moment_index:
+                                    line = re.sub('X', '+', line)
+                                elif match and moment_index<int(match.group(2)):
+                                    line = re.sub('X', 'I', line)
 
                             self._subprocess.stdin.write(line.encode())
 
@@ -898,25 +874,25 @@ potential ( {target_posterior} | '''
                     # print("post time = ")
                     # print(time.time() - post_start)
 
-                    # yield sparse_simulator.SparseSimulatorStep(
-                    #     state_vector=state_vector,
-                    #     measurements=measurements,
-                    #     qubit_map=self._qubit_map,
-                    #     dtype=self._dtype)
-                    # print("measurements=")
-                    # print(measurements)
-                    yield density_matrix_simulator.DensityMatrixStepResult(
-                        density_matrix=density_matrix,
+                    yield sparse_simulator.SparseSimulatorStep(
+                        state_vector=state_vector,
                         measurements=measurements,
                         qubit_map=self._qubit_map,
                         dtype=self._dtype)
+                    # print("measurements=")
+                    # print(measurements)
+                    # yield density_matrix_simulator.DensityMatrixStepResult(
+                    #     density_matrix=density_matrix,
+                    #     measurements=measurements,
+                    #     qubit_map=self._qubit_map,
+                    #     dtype=self._dtype)
 
-    def _create_simulator_trial_result(self,
-            params: study.ParamResolver,
-            measurements: Dict[str, np.ndarray],
-            final_simulator_state: 'DensityMatrixSimulatorState') \
-            -> 'DensityMatrixTrialResult':
-        return density_matrix_simulator.DensityMatrixTrialResult(
-            params=params,
-            measurements=measurements,
-            final_simulator_state=final_simulator_state)
+    # def _create_simulator_trial_result(self,
+    #         params: study.ParamResolver,
+    #         measurements: Dict[str, np.ndarray],
+    #         final_simulator_state: 'DensityMatrixSimulatorState') \
+    #         -> 'DensityMatrixTrialResult':
+    #     return density_matrix_simulator.DensityMatrixTrialResult(
+    #         params=params,
+    #         measurements=measurements,
+    #         final_simulator_state=final_simulator_state)
