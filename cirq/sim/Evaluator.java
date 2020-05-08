@@ -1,7 +1,7 @@
 package edu.ucla.belief.ace;
 import java.lang.Double;
 import java.io.*;
-import java.util.Arrays;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import org.apache.commons.math3.complex.*;
 
@@ -25,16 +25,23 @@ public class Evaluator {
    * @throws Exception if execution fails.
    */
 
-  static OnlineEngineSop g;
+  static OnlineEngineMixed g;
+
   static short qubitCount;
   static int[] qubitFinalToVar;
+  static Map<Integer,Integer> varToQubitFinal;
+
   static short noiseCount;
   static int[] noiseRVToVar;
+  static Map<Integer,Integer> varToNoiseRV;
+
   static Evidence evidence;
+
   static long evidenceDuration;
   static long evaluationDuration;
   static long amplitudeDuration;
   static long derivativesDuration;
+
   static BufferedWriter csv;
 
   public static void main(String[] args) throws Exception {
@@ -43,10 +50,9 @@ public class Evaluator {
 
     // Create the online inference engine.  An OnlineEngine reads from disk
     // a literal map and an arithmetic circuit compiled for a network.
-    g = new OnlineEngineSop(
+    g = new OnlineEngineMixed(
         args[0],
-        args[1],
-        true);
+        args[1]);
     qubitCount = Short.parseShort(args[2]);
     noiseCount = Short.parseShort(args[3]);
 
@@ -55,15 +61,17 @@ public class Evaluator {
     // OnlineEngine.
 
     try {
-      while( g.readLiteralMap(lmReader, OnlineEngine.CompileKind.ALWAYS_SUM) != null ){
+      while( g.readLiteralMap(lmReader, OnlineEngine.CompileKind.SOMETIMES_SUM_SOMETIMES_MAX) != null ){
 
         qubitFinalToVar = new int[qubitCount];
+        varToQubitFinal = new HashMap<Integer,Integer>();
         for (int qubit=0; qubit<qubitCount; qubit++) {
           for (int trial=g.moment; ; trial--) {
             String qubitName = String.format("n%04dq%04d", trial, qubit);
             try {
               int varForQubit = g.varForName(qubitName);
               qubitFinalToVar[qubit] = varForQubit;
+              varToQubitFinal.put(varForQubit,qubit);
               break;
             } catch (Exception e) {
             }
@@ -71,10 +79,12 @@ public class Evaluator {
         }
 
         noiseRVToVar = new int[noiseCount];
+        varToNoiseRV = new HashMap<Integer,Integer>();
         int noiseRVIndex = 0;
         for (int var = 0; var < g.numVariables(); var++) {
-          if (g.nameForVar(var).endsWith("rv")) {
+          if (g.nameForVar(var).startsWith("rv")) {
             noiseRVToVar[noiseRVIndex++] = var;
+            varToNoiseRV.put(var,noiseRVIndex);
           }
         }
         assert noiseRVIndex == noiseCount;
@@ -95,50 +105,94 @@ public class Evaluator {
 
         if ( g.repetitions!=0 ) {
 
-          byte[] noiseArray = new byte[noiseCount];
-          for (short noise=0; noise<noiseCount; noise++) {
-            noiseArray[noise] = (byte) ThreadLocalRandom.current().nextInt(4);
-          }
-          long outputQubitString = ThreadLocalRandom.current().nextLong( 1L<<qubitCount );
-
-          for ( int iter=0; iter<Math.max(16,noiseCount); iter++ ) { // warmup
-            // System.out.println("noiseArray="+Arrays.toString(noiseArray)+" outputQubitString"+outputQubitString);
-            Complex markovAmplitude = findAmplitude(noiseArray, outputQubitString, false);
-            if ( noiseCount!=0 ) {
-              noiseArray = findDerivativesNoise(noiseArray);
-              markovAmplitude = findAmplitude(noiseArray, outputQubitString, false);
-            }
-            outputQubitString = findDerivativesQubit(outputQubitString);
-          }
-
           for ( int iter=0; iter<g.repetitions; iter++ ) {
-            // System.out.println("noiseArray="+Arrays.toString(noiseArray)+" outputQubitString"+outputQubitString);
 
-            long amplitudeStart = System.nanoTime();
-            Complex markovAmplitude = findAmplitude(noiseArray, outputQubitString, true);
-            amplitudeDuration += System.nanoTime()-amplitudeStart;
+            byte[] noiseArray = new byte[noiseCount];
+            g.evaluate(evidence);
+            // System.out.println("g.evaluationResults()=");
+            // System.out.println(g.evaluationResults());
+            List<Integer> list = g.fCalculator.dftSample(
+                g.numAcNodes(),
+                g.fNodeToType,
+                g.logicVarToElimOp,
+                g.fNodeToLit,
+                g.fNodeToLastEdge,
+                g.fEdgeToTailNode,
+                evidence
+            );
+            long outputQubitString = 0L;
+            for (int l : list) {
+              int var = (l < 0 ? g.fAcVarToNegSrcVar : g.fAcVarToPosSrcVar)[Math.abs(l)];
+              if (var!=-1) {
 
-            if ( noiseCount!=0 ) {
+                int val = (l < 0 ? g.fAcVarToNegSrcVal : g.fAcVarToPosSrcVal)[Math.abs(l)];
+                // System.out.print("val=");
+                // System.out.println(val);
 
-              long derivativesStart = System.nanoTime();
-              noiseArray = findDerivativesNoise(noiseArray);
-              derivativesDuration += System.nanoTime()-derivativesStart;
+                // System.out.print("g.fSrcVarToName[var]=");
+                // System.out.println(g.fSrcVarToName[var]);
 
-              amplitudeStart = System.nanoTime();
-              markovAmplitude = findAmplitude(noiseArray, outputQubitString, false);
-              amplitudeDuration += System.nanoTime()-amplitudeStart;
+                if (varToQubitFinal.containsKey(var)) {
+                  int qubit = varToQubitFinal.get(var);
+                  outputQubitString += val<<(qubitCount-qubit-1);
+                } else if (varToNoiseRV.containsKey(var)) {
+                } else {
+                  System.out.println("Variable is neither final qubit state nor noise RV.");
+                  // throw new Exception("Variable is neither qubit nor noise RV.");
+                }
 
+              }
             }
-
-            long derivativesStart = System.nanoTime();
-            outputQubitString = findDerivativesQubit(outputQubitString);
-            derivativesDuration += System.nanoTime()-derivativesStart;
+            // System.out.println(noiseArray+","+outputQubitString);
+            csv.write(noiseArray+","+outputQubitString);
+            csv.newLine();
 
           }
-          System.out.println( String.format("   evidence time=%16d",evidenceDuration) );
-          System.out.println( String.format(" evaluation time=%16d",evaluationDuration) );
-          System.out.println( String.format("  amplitude time=%16d",amplitudeDuration) );
-          System.out.println( String.format("derivatives time=%16d",derivativesDuration) );
+
+          // byte[] noiseArray = new byte[noiseCount];
+          // for (short noise=0; noise<noiseCount; noise++) {
+          //   noiseArray[noise] = (byte) ThreadLocalRandom.current().nextInt(4);
+          // }
+          // long outputQubitString = ThreadLocalRandom.current().nextLong( 1L<<qubitCount );
+          //
+          // for ( int iter=0; iter<Math.max(16,noiseCount); iter++ ) { // warmup
+          //   // System.out.println("noiseArray="+Arrays.toString(noiseArray)+" outputQubitString"+outputQubitString);
+          //   Complex markovAmplitude = findAmplitude(noiseArray, outputQubitString, false);
+          //   if ( noiseCount!=0 ) {
+          //     noiseArray = findDerivativesNoise(noiseArray);
+          //     markovAmplitude = findAmplitude(noiseArray, outputQubitString, false);
+          //   }
+          //   outputQubitString = findDerivativesQubit(outputQubitString);
+          // }
+          //
+          // for ( int iter=0; iter<g.repetitions; iter++ ) {
+          //   // System.out.println("noiseArray="+Arrays.toString(noiseArray)+" outputQubitString"+outputQubitString);
+          //
+          //   long amplitudeStart = System.nanoTime();
+          //   Complex markovAmplitude = findAmplitude(noiseArray, outputQubitString, true);
+          //   amplitudeDuration += System.nanoTime()-amplitudeStart;
+          //
+          //   if ( noiseCount!=0 ) {
+          //
+          //     long derivativesStart = System.nanoTime();
+          //     noiseArray = findDerivativesNoise(noiseArray);
+          //     derivativesDuration += System.nanoTime()-derivativesStart;
+          //
+          //     amplitudeStart = System.nanoTime();
+          //     markovAmplitude = findAmplitude(noiseArray, outputQubitString, false);
+          //     amplitudeDuration += System.nanoTime()-amplitudeStart;
+          //
+          //   }
+          //
+          //   long derivativesStart = System.nanoTime();
+          //   outputQubitString = findDerivativesQubit(outputQubitString);
+          //   derivativesDuration += System.nanoTime()-derivativesStart;
+          //
+          // }
+          // System.out.println( String.format("   evidence time=%16d",evidenceDuration) );
+          // System.out.println( String.format(" evaluation time=%16d",evaluationDuration) );
+          // System.out.println( String.format("  amplitude time=%16d",amplitudeDuration) );
+          // System.out.println( String.format("derivatives time=%16d",derivativesDuration) );
 
         } else if (!g.bitstrings.isEmpty()) {
           for (int outputQubitString: g.bitstrings) {
@@ -235,7 +289,7 @@ public class Evaluator {
     // become available.  Inference time will still be linear in the size of the
     // arithmetic circuit, but the constant factor will be larger.
     if (!g.differentiateResultsAvailable()) {
-      g.differentiate();
+      // g.differentiate();
     }
 
     // Once again retrieve results without performing inference.  We get
@@ -259,26 +313,26 @@ public class Evaluator {
     int varForNoise = noiseRVToVar[randomNoise];
     // System.out.println("varForNoise = " + varForNoise);
 
-    double partial_0 = g.varPartials(varForNoise)[0].abs() * g.varPartials(varForNoise)[0].abs();
-    double partial_1 = g.varPartials(varForNoise)[1].abs() * g.varPartials(varForNoise)[1].abs();
-    double partial_2 = g.varPartials(varForNoise)[2].abs() * g.varPartials(varForNoise)[2].abs();
-    double partial_3 = g.varPartials(varForNoise)[3].abs() * g.varPartials(varForNoise)[3].abs();
-
-    double prob_0 = partial_0/(partial_0+partial_1+partial_2+partial_3);
-    double prob_1 = partial_1/(partial_0+partial_1+partial_2+partial_3);
-    double prob_2 = partial_2/(partial_0+partial_1+partial_2+partial_3);
-    double prob_3 = partial_3/(partial_0+partial_1+partial_2+partial_3);
-
-    double rand = ThreadLocalRandom.current().nextDouble();
-    if ( rand <= prob_0 ) {
-      noiseArray[randomNoise] = 0;
-    } else if ( rand <= prob_0+prob_1 ) {
-      noiseArray[randomNoise] = 1;
-    } else if ( rand <= prob_0+prob_1+prob_2 ) {
-      noiseArray[randomNoise] = 2;
-    } else {
-      noiseArray[randomNoise] = 3;
-    }
+    // double partial_0 = g.varPartials(varForNoise)[0].abs() * g.varPartials(varForNoise)[0].abs();
+    // double partial_1 = g.varPartials(varForNoise)[1].abs() * g.varPartials(varForNoise)[1].abs();
+    // double partial_2 = g.varPartials(varForNoise)[2].abs() * g.varPartials(varForNoise)[2].abs();
+    // double partial_3 = g.varPartials(varForNoise)[3].abs() * g.varPartials(varForNoise)[3].abs();
+    //
+    // double prob_0 = partial_0/(partial_0+partial_1+partial_2+partial_3);
+    // double prob_1 = partial_1/(partial_0+partial_1+partial_2+partial_3);
+    // double prob_2 = partial_2/(partial_0+partial_1+partial_2+partial_3);
+    // double prob_3 = partial_3/(partial_0+partial_1+partial_2+partial_3);
+    //
+    // double rand = ThreadLocalRandom.current().nextDouble();
+    // if ( rand <= prob_0 ) {
+    //   noiseArray[randomNoise] = 0;
+    // } else if ( rand <= prob_0+prob_1 ) {
+    //   noiseArray[randomNoise] = 1;
+    // } else if ( rand <= prob_0+prob_1+prob_2 ) {
+    //   noiseArray[randomNoise] = 2;
+    // } else {
+    //   noiseArray[randomNoise] = 3;
+    // }
 
     // for (int qubit=0; qubit<qubitCount; qubit++) {
     //   varForQubit = qubitFinalToVar[qubit];
@@ -316,7 +370,7 @@ public class Evaluator {
     // become available.  Inference time will still be linear in the size of the
     // arithmetic circuit, but the constant factor will be larger.
     if (!g.differentiateResultsAvailable()) {
-      g.differentiate();
+      // g.differentiate();
     }
 
     // Once again retrieve results without performing inference.  We get
@@ -340,17 +394,17 @@ public class Evaluator {
     int varForQubit = qubitFinalToVar[randomQubit];
     // System.out.println("varForQubit = " + varForQubit);
 
-    // evidence.varCommit(varForQubit, 0);
-    // g.evaluate(evidence);
-    // Complex amplitude_0 = g.evaluationResults();
-    // double partial_0 = amplitude_0.abs() * amplitude_0.abs();
-    double partial_0 = g.varPartials(varForQubit)[0].abs() * g.varPartials(varForQubit)[0].abs();
+    evidence.varCommit(varForQubit, 0);
+    g.evaluate(evidence);
+    Complex amplitude_0 = g.evaluationResults();
+    double partial_0 = amplitude_0.abs() * amplitude_0.abs();
+    // double partial_0 = g.varPartials(varForQubit)[0].abs() * g.varPartials(varForQubit)[0].abs();
 
-    // evidence.varCommit(varForQubit, 1);
-    // g.evaluate(evidence);
-    // Complex amplitude_1 = g.evaluationResults();
-    // double partial_1 = amplitude_1.abs() * amplitude_1.abs();
-    double partial_1 = g.varPartials(varForQubit)[1].abs() * g.varPartials(varForQubit)[1].abs();
+    evidence.varCommit(varForQubit, 1);
+    g.evaluate(evidence);
+    Complex amplitude_1 = g.evaluationResults();
+    double partial_1 = amplitude_1.abs() * amplitude_1.abs();
+    // double partial_1 = g.varPartials(varForQubit)[1].abs() * g.varPartials(varForQubit)[1].abs();
 
     double probability = partial_1/(partial_0+partial_1);
     // System.out.println("partial_0 = " + partial_0);
