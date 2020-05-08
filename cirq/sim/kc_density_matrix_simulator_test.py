@@ -420,8 +420,8 @@ def test_run_sweeps_param_resolvers(dtype):
             np.testing.assert_equal(results[0].measurements,
                                     {'0': [[b0]], '1': [[b1]] })
             # The following assertion fails because of Gibbs sampling warmup
-            # np.testing.assert_equal(results[1].measurements,
-            #                         {'0': [[b1]], '1': [[b0]] })
+            np.testing.assert_equal(results[1].measurements,
+                                    {'0': [[b1]], '1': [[b0]] })
             assert results[0].params == params[0]
             assert results[1].params == params[1]
 
