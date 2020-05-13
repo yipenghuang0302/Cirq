@@ -97,6 +97,7 @@ Unitary effects that can be applied to one or more qubits.
     cirq.TaggedOperation
     cirq.ThreeQubitDiagonalGate
     cirq.ThreeQubitGate
+    cirq.TwoQubitDiagonalGate
     cirq.TwoQubitGate
     cirq.WaitGate
     cirq.XPowGate
@@ -338,6 +339,7 @@ the magic methods that can be implemented.
     cirq.pow
     cirq.qasm
     cirq.qid_shape
+    cirq.quil
     cirq.read_json
     cirq.resolve_parameters
     cirq.to_json
@@ -350,6 +352,8 @@ the magic methods that can be implemented.
     cirq.CircuitDiagramInfoArgs
     cirq.QasmArgs
     cirq.QasmOutput
+    cirq.QuilFormatter
+    cirq.QuilOutput
     cirq.SupportsApplyChannel
     cirq.SupportsApplyMixture
     cirq.SupportsApproximateEquality
@@ -436,6 +440,7 @@ run experiments.
     cirq.experiments.single_qubit_state_tomography
     cirq.experiments.state_tomography
     cirq.experiments.t1_decay
+    cirq.experiments.t2_decay
     cirq.experiments.two_qubit_randomized_benchmarking
     cirq.experiments.two_qubit_state_tomography
     cirq.experiments.CrossEntropyResult
@@ -445,6 +450,7 @@ run experiments.
     cirq.experiments.SingleQubitReadoutCalibrationResult
     cirq.experiments.StateTomographyExperiment
     cirq.experiments.T1DecayResult
+    cirq.experiments.T2DecayResult
     cirq.experiments.TomographyResult
 
 
