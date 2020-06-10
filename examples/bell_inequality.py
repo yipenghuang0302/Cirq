@@ -36,7 +36,7 @@ def main():
 
     # Run simulations.
     print()
-    repetitions = 75
+    repetitions = 7500
     print('Simulating {} repetitions...'.format(repetitions))
     result = cirq.Simulator().run(program=circuit, repetitions=repetitions)
 

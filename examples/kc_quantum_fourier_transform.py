@@ -52,13 +52,13 @@ def main():
     assert cirq.linalg.allclose_up_to_global_phase(
         sv_result.state_vector(), qs_result.state_vector())
 
-    kc_simulator = cirq.KnowledgeCompilationSimulator(qft_circuit)
+    kc_simulator = cirq.KnowledgeCompilationSimulator(qft_circuit,intermediate=True)
     kc_result = kc_simulator.simulate(qft_circuit)
     print()
     print('FinalState')
     assert cirq.linalg.allclose_up_to_global_phase(
         sv_result.state_vector(), kc_result.state_vector())
-    print(kc_result.final_density_matrix)
+    print(kc_result.state_vector())
     print(np.around(kc_result.final_state, 3))
 
 def _cz_and_swap(q0, q1, rot):

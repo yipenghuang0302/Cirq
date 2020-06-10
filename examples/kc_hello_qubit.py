@@ -52,21 +52,21 @@ def main():
     #         random_circuit.unitary(),
     #         decimal=4)
 
-    q0,q1,q2 = cirq.LineQubit.range(3)
+    q0,q1 = cirq.LineQubit.range(2)
     for iteration in range(3):
-        random_circuit = cirq.testing.random_circuit(qubits=[q0,q1,q2],
-                                                     n_moments=3,
+        random_circuit = cirq.testing.random_circuit(qubits=[q0,q1],
+                                                     n_moments=2,
                                                      op_density=0.99)
         print("random_circuit:")
         print(random_circuit)
 
-        # noise = cirq.ConstantQubitNoiseModel(cirq.asymmetric_depolarize(0.2,0.3,0.4)) # mixture: size four noise not implemented
+        noise = cirq.ConstantQubitNoiseModel(cirq.asymmetric_depolarize(0.2,0.3,0.4)) # mixture: size four noise not implemented
         # noise = cirq.ConstantQubitNoiseModel(cirq.depolarize(0.1)) # mixture: size four noise not implemented
         # noise = cirq.ConstantQubitNoiseModel(cirq.phase_flip(0.1)) # mixture: works well
         # noise = cirq.ConstantQubitNoiseModel(cirq.bit_flip(0.1)) # mixture: works well
 
-        # noise = cirq.ConstantQubitNoiseModel(cirq.generalized_amplitude_damp(0.1,0.0)) # channel: size four noise not implemented
-        noise = cirq.ConstantQubitNoiseModel(cirq.amplitude_damp(0.1)) # channel:
+        # noise = cirq.ConstantQubitNoiseModel(cirq.generalized_amplitude_damp(9/25,49/625)) # channel: size four noise not implemented
+        # noise = cirq.ConstantQubitNoiseModel(cirq.amplitude_damp(0.1)) # channel:
         # noise = cirq.ConstantQubitNoiseModel(cirq.phase_damp(0.1)) # channel:
         # reset?
 
@@ -88,27 +88,27 @@ def main():
                 dm_result.final_density_matrix,
                 decimal=5)
 
-    # q0,q1 = cirq.LineQubit.range(2)
+    # q0 = cirq.LineQubit(0)
     #
-    # circuit = cirq.Circuit( cirq.H(q0), cirq.phase_flip(9/25)(q0), cirq.CNOT(q0,q1) )
+    # circuit = cirq.Circuit( cirq.generalized_amplitude_damp(9/25,49/625)(q0) )
     # print("circuit:")
     # print(circuit)
     #
-    # initial_state = 0
+    # initial_state = 1
     #
-    # sv_simulator = cirq.Simulator()
+    # # sv_simulator = cirq.Simulator()
     # dm_simulator = cirq.DensityMatrixSimulator()
-    # kc_simulator = cirq.KnowledgeCompilationSimulator( circuit, initial_state=initial_state )
+    # kc_simulator = cirq.KnowledgeCompilationSimulator( circuit, initial_state=initial_state  )
     #
-    # sv_result = sv_simulator.simulate( circuit, initial_state=initial_state )
-    # print("sv_result.state_vector():")
-    # print(sv_result.state_vector())
+    # # sv_result = sv_simulator.simulate( circuit, initial_state=initial_state )
+    # # print("sv_result.state_vector():")
+    # # print(sv_result.state_vector())
     #
     # dm_result = dm_simulator.simulate( circuit, initial_state=initial_state )
     # print("dm_result:")
     # print(dm_result)
     #
-    # kc_result = kc_simulator.simulate(circuit)
+    # kc_result = kc_simulator.simulate( circuit )
     # print("kc_result:")
     # print(kc_result)
     #

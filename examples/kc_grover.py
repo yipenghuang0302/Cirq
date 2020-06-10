@@ -29,7 +29,7 @@ Found a match: True
 
 import random
 import cirq
-
+import numpy as np
 
 def set_io_qubits(qubit_count):
     """Add the specified number of input and output qubits."""
@@ -72,9 +72,6 @@ def make_grover_circuit(input_qubits, output_qubit, oracle):
     c.append(cirq.X.on_each(*input_qubits))
     c.append(cirq.H.on_each(*input_qubits))
 
-    # Measure the result.
-    c.append(cirq.measure(*input_qubits, key='result'))
-
     return c
 
 
@@ -83,8 +80,8 @@ def bitstring(bits):
 
 
 def main():
-    qubit_count = 2
-    circuit_sample_count = 10
+    qubit_count = 3
+    circuit_sample_count = 100
 
     #Set up input and output qubits.
     (input_qubits, output_qubit) = set_io_qubits(qubit_count)
@@ -102,9 +99,20 @@ def main():
     print(circuit)
 
     # Sample from the circuit a couple times.
-    simulator = cirq.KnowledgeCompilationSimulator(circuit)
-    result = simulator.run(circuit, repetitions=circuit_sample_count)
+    sv_simulator = cirq.Simulator()
+    sv_result = sv_simulator.simulate(circuit)
 
+    # Measure the result.
+    circuit.append(cirq.measure(*input_qubits, key='result'))
+    kc_simulator = cirq.KnowledgeCompilationSimulator(circuit,intermediate=False)
+    kc_result = kc_simulator.simulate(circuit)
+
+    np.testing.assert_almost_equal(
+        sv_result.state_vector(),
+        kc_result.state_vector(),
+        decimal=7)
+
+    result = kc_simulator.run(circuit, repetitions=circuit_sample_count)
     frequencies = result.histogram(key='result', fold_func=bitstring)
     print('Sampled results:\n{}'.format(frequencies))
 

@@ -24,29 +24,43 @@ Win rate: 84.0%
 """
 
 import numpy as np
-
 import cirq
-
 
 def main():
     # Create circuit.
-    circuit = make_bell_test_circuit()
-    print('Circuit:')
-    print(circuit)
+    alice, bob, alice_referee, bob_referee = cirq.LineQubit.range(4)
+    circuit = make_bell_test_circuit(alice, bob, alice_referee, bob_referee)
 
     # Run simulations.
-    # dm_result = cirq.DensityMatrixSimulator().simulate(program=circuit)
-    # kc_result = cirq.KnowledgeCompilationSimulator(program=circuit).simulate(program=circuit)
-    # np.testing.assert_almost_equal(
-    #     dm_result.final_density_matrix,
-    #     kc_result.final_density_matrix
-    # )
+    sv_result = cirq.Simulator().simulate(program=circuit)
 
-    print()
-    repetitions = 75
+    # Then results are recorded.
+    circuit.append([
+        cirq.measure(alice, key='a'),
+        cirq.measure(bob, key='b'),
+        cirq.measure(alice_referee, key='x'),
+        cirq.measure(bob_referee, key='y'),
+    ])
+    cirq.optimizers.SynchronizeTerminalMeasurements().optimize_circuit(circuit)
+    print('Circuit:')
+    print(circuit)
+    kc_simulator = cirq.KnowledgeCompilationSimulator(program=circuit, intermediate=False)
+    kc_result = kc_simulator.simulate(program=circuit)
+
+    print("sv_result.final_state")
+    print(sv_result.final_state)
+    print("kc_result.final_state")
+    print(kc_result.final_state)
+
+    np.testing.assert_almost_equal(
+        sv_result.final_state,
+        kc_result.final_state
+    )
+
+    repetitions = 7500
     print('Simulating {} repetitions...'.format(repetitions))
     sv_result = cirq.Simulator().run(program=circuit, repetitions=repetitions)
-    kc_result = cirq.KnowledgeCompilationSimulator(program=circuit,intermediate=True).run(program=circuit, repetitions=repetitions)
+    kc_result = kc_simulator.run(program=circuit, repetitions=repetitions)
 
     # Collect results.
     a = np.array(kc_result.measurements['a'][:, 0])
@@ -67,8 +81,7 @@ def main():
     print('Win rate: {}%'.format(win_percent))
 
 
-def make_bell_test_circuit():
-    alice, bob, alice_referee, bob_referee = cirq.LineQubit.range(4)
+def make_bell_test_circuit(alice, bob, alice_referee, bob_referee):
 
     circuit = cirq.Circuit()
 
@@ -89,14 +102,6 @@ def make_bell_test_circuit():
     circuit.append([
         cirq.decompose(cirq.CNOT(alice_referee, alice)**0.5),
         cirq.decompose(cirq.CNOT(bob_referee, bob)**0.5),
-    ])
-
-    # Then results are recorded.
-    circuit.append([
-        cirq.measure(alice, key='a'),
-        cirq.I(bob), cirq.measure(bob, key='b'),
-        cirq.I(alice_referee), cirq.measure(alice_referee, key='x'),
-        cirq.I(bob_referee), cirq.I(bob_referee), cirq.measure(bob_referee, key='y'),
     ])
 
     return circuit

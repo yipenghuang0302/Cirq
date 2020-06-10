@@ -68,7 +68,7 @@ def main(qubit_count = 8):
     print(circuit)
 
     # Sample from the circuit a couple times.
-    simulator = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True)
+    simulator = cirq.KnowledgeCompilationSimulator(circuit, intermediate=False)
     result = simulator.run(circuit, repetitions=circuit_sample_count)
     frequencies = result.histogram(key='result', fold_func=bitstring)
     print('Sampled results:\n{}'.format(frequencies))

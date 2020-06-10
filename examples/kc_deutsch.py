@@ -30,46 +30,55 @@ import random
 import cirq
 from cirq import H, X, CNOT, measure
 import qsimcirq
+import numpy as np
 
 
 def main():
-    # Choose qubits to use.
-    q0, q1 = cirq.LineQubit.range(2)
 
-    # Pick a secret 2-bit function and create a circuit to query the oracle.
-    secret_function = [random.randint(0, 1) for _ in range(2)]
-    oracle = make_oracle(q0, q1, secret_function)
-    print('Secret function:\nf(x) = <{}>'.format(
-        ', '.join(str(e) for e in secret_function)))
+    for _ in range(16):
+        # Choose qubits to use.
+        q0, q1 = cirq.LineQubit.range(2)
 
-    # Embed the oracle into a quantum circuit querying it exactly once.
-    circuit_no_meas = make_deutsch_circuit(q0, q1, oracle)
-    qs_circuit = qsimcirq.QSimCircuit(circuit_no_meas)
+        # Pick a secret 2-bit function and create a circuit to query the oracle.
+        secret_function = [random.randint(0, 1) for _ in range(2)]
+        oracle = make_oracle(q0, q1, secret_function)
 
-    # Simulate the circuit.
-    sv_simulator = cirq.Simulator()
-    qs_simulator = qsimcirq.QSimSimulator(qsim_options={'t': 1, 'v': 4})
+        # Embed the oracle into a quantum circuit querying it exactly once.
+        circuit_no_meas = make_deutsch_circuit(q0, q1, oracle)
+        qs_circuit = qsimcirq.QSimCircuit(circuit_no_meas)
 
-    sv_result = sv_simulator.simulate(circuit_no_meas)
-    assert sv_result.state_vector().shape == (4,)
-    qs_result = qs_simulator.simulate(qs_circuit)
-    assert qs_result.state_vector().shape == (4,)
-    assert cirq.linalg.allclose_up_to_global_phase(
-        sv_result.state_vector(), qs_result.state_vector())
+        # Simulate the circuit.
+        sv_simulator = cirq.Simulator()
+        qs_simulator = qsimcirq.QSimSimulator(qsim_options={'t': 1, 'v': 4})
 
-    circuit = cirq.Circuit( circuit_no_meas, measure(q0, key='result') )
-    print('Circuit:')
-    print(circuit)
-    sv_result = sv_simulator.run(circuit)
-    kc_simulator = cirq.sim.KnowledgeCompilationSimulator(circuit)
-    kc_result = kc_simulator.run(circuit)
-    assert sv_result==kc_result
+        sv_result = sv_simulator.simulate(circuit_no_meas)
+        assert sv_result.state_vector().shape == (4,)
+        qs_result = qs_simulator.simulate(qs_circuit)
+        assert qs_result.state_vector().shape == (4,)
+        assert cirq.linalg.allclose_up_to_global_phase(
+            sv_result.state_vector(), qs_result.state_vector())
 
-    print('STATE_VECTOR_SIMULATOR: Result of f(0)⊕f(1):')
-    print(sv_result)
-    print('KNOWLEDGE_COMPILATION_SIMULATOR: Result of f(0)⊕f(1):')
-    print(kc_result)
+        circuit = cirq.Circuit( circuit_no_meas, measure(q0, key='result') )
+        kc_simulator = cirq.sim.KnowledgeCompilationSimulator(circuit, intermediate=False)
+        kc_result = kc_simulator.simulate(circuit)
+        assert kc_result.state_vector().shape == (4,)
+        np.testing.assert_almost_equal(
+            sv_result.state_vector(),
+            kc_result.state_vector(),
+            decimal=7)
 
+        print('Secret function:\nf(x) = <{}>'.format(
+            ', '.join(str(e) for e in secret_function)))
+        print('Circuit:')
+        print(circuit)
+        print('STATE_VECTOR_SIMULATOR: Result of f(0)⊕f(1):')
+        sv_result = sv_simulator.run(circuit)
+        print(sv_result)
+        print('KNOWLEDGE_COMPILATION_SIMULATOR: Result of f(0)⊕f(1):')
+        kc_result = kc_simulator.run(circuit)
+        print(kc_result)
+
+        assert sv_result==kc_result
 
 def make_oracle(q0, q1, secret_function):
     """ Gates implementing the secret function f(x)."""

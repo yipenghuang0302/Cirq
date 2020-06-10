@@ -39,3 +39,14 @@ docs/generated
 
 # Default pycharm virtual env
 .venv/
+
+*.net
+*.lmap
+*.file
+*.cnf
+*.cnf_simplified
+*.nnf
+*.buf
+*.csv
+*.vcg
+*.pdf

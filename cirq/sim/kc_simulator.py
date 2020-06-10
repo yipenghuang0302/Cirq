@@ -22,13 +22,13 @@ import numbers, cmath, sympy
 import numpy as np
 
 from cirq import circuits, ops, protocols, qis, study, optimizers, value, devices
-from cirq.sim import simulator, wave_function, density_matrix_utils, wave_function_simulator, sparse_simulator, density_matrix_simulator
+from cirq.sim import simulator, state_vector, density_matrix_utils, state_vector_simulator, sparse_simulator, density_matrix_simulator
 
 import os, subprocess, re, csv, sys, time
 
 class KnowledgeCompilationSimulator(simulator.SimulatesSamples,
-                                    wave_function_simulator.SimulatesIntermediateWaveFunction):
-    """A wave function simulator based on Bayesian network knowledge compilation.
+                                    state_vector_simulator.SimulatesIntermediateStateVector):
+    """A state vector simulator based on Bayesian network knowledge compilation.
 
     This simulator can be applied on circuits that are made up of operations
     that have a `_unitary_` method, or `_has_unitary_` and
@@ -44,7 +44,7 @@ class KnowledgeCompilationSimulator(simulator.SimulatesSamples,
     This simulator supports three types of simulation.
 
     Run simulations which mimic running on actual quantum hardware. These
-    simulations do not give access to the wave function (like actual hardware).
+    simulations do not give access to the state vector (like actual hardware).
     There are two variations of run methods, one which takes in a single
     (optional) way to resolve parameterized circuits, and a second which
     takes in a list or sweep of parameter resolver:
@@ -61,12 +61,12 @@ class KnowledgeCompilationSimulator(simulator.SimulatesSamples,
     in the computational basis.
 
     By contrast the simulate methods of the simulator give access to the
-    wave function of the simulation at the end of the simulation of the circuit.
+    state vector of the simulation at the end of the simulation of the circuit.
     These methods take in two parameters that the run methods do not: a
     qubit order and an initial state. The qubit order is necessary because an
     ordering must be chosen for the kronecker product (see
     `SparseSimulationTrialResult` for details of this ordering). The initial
-    state can be either the full wave function, or an integer which represents
+    state can be either the full state vector, or an integer which represents
     the initial state of being in a computational basis state for the binary
     representation of that integer. Similar to run methods, there are two
     simulate methods that run for single runs or for sweeps across different
@@ -84,9 +84,9 @@ class KnowledgeCompilationSimulator(simulator.SimulatesSamples,
     methods.
 
     If one wishes to perform simulations that have access to the
-    wave function as one steps through running the circuit there is a generator
+    state vector as one steps through running the circuit there is a generator
     which can be iterated over and each step is an object that gives access
-    to the wave function.  This stepping through a `Circuit` is done on a
+    to the state vector.  This stepping through a `Circuit` is done on a
     `Moment` by `Moment` manner.
 
         simulate_moment_steps(circuit, param_resolver, qubit_order,
@@ -95,7 +95,7 @@ class KnowledgeCompilationSimulator(simulator.SimulatesSamples,
     One can iterate over the moments via
 
         for step_result in simulate_moments(circuit):
-           # do something with the wave function via step_result.state
+           # do something with the state vector via step_result.state
 
     Note also that simulations can be stochastic, i.e. return different results
     for different runs.  The first version of this occurs for measurements,
@@ -103,7 +103,7 @@ class KnowledgeCompilationSimulator(simulator.SimulatesSamples,
     occur when the circuit has mixtures of unitaries.
 
     Finally, one can compute the values of displays (instances of
-    `SamplesDisplay` or `WaveFunctionDisplay`) in the circuit:
+    `SamplesDisplay` or `StateVectorDisplay`) in the circuit:
 
         compute_displays(circuit, param_resolver, qubit_order, initial_state)
 
@@ -144,14 +144,14 @@ class KnowledgeCompilationSimulator(simulator.SimulatesSamples,
     net_prelude_qubit = \
 '''node {target_posterior} {{
     states = ("|0>" "|1>");
-    subtype = qubit;
+    subtype = qubit_amplitude;
 }}
 potential ( {target_posterior} | '''
 
     net_prelude_noise = \
 '''node {target_posterior} {{
     states = ("0" "1" "2" "3");
-    subtype = depolarize;
+    subtype = noise_probability;
 }}
 potential ( {target_posterior} | '''
 
@@ -231,7 +231,7 @@ potential ( {target_posterior} | '''
 
         for _ in range(1):
             if not self._intermediate: # messes up moment steps, moment step samping
-                # optimizers.ExpandComposite().optimize_circuit(circuit) # seems to actually increase BN size
+                optimizers.ExpandComposite().optimize_circuit(circuit) # seems to actually increase BN size
                 # optimizers.ConvertToCzAndSingleGates().optimize_circuit(circuit) # cannot work with params
                 # optimizers.MergeInteractions().optimize_circuit(circuit) # generally okay, but may cause test_simulate_random_unitary to fail due to small circuit sizes
                 optimizers.MergeSingleQubitGates().optimize_circuit(circuit)
@@ -239,7 +239,7 @@ potential ( {target_posterior} | '''
                 optimizers.EjectPhasedPaulis().optimize_circuit(circuit)
                 # optimizers.SynchronizeTerminalMeasurements().optimize_circuit(circuit)
                 pass
-            optimizers.EjectZ().optimize_circuit(circuit) # incompatible with noise simulation
+            # optimizers.EjectZ().optimize_circuit(circuit) # incompatible with noise simulation
             # optimizers.DropNegligible().optimize_circuit(circuit)
 
         self._circuit = circuit
@@ -301,22 +301,21 @@ potential ( {target_posterior} | '''
                 if isinstance (op.gate,ops.PhaseDampingChannel):
                     self._num_noise += 1
 
-
                     qubit = op.qubits[0]
 
-                    rv_node_string = self.net_prelude_noise
+                    rvc_node_string = self.net_prelude_noise
                     depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
                     parent = 'n' + depth + 'q' + str(qubit).zfill(4)
-                    rv_node_string += parent + ' '
-                    rv_node_string += self.net_interlude
-                    rv_node_string += '( '
-                    rv_node_string += '(1 0 0 0) (+{cos_term} -{sin_term} 0 0) '
-                    rv_node_string += ')'
-                    rv_node_string += self.net_postlude
+                    rvc_node_string += parent + ' '
+                    rvc_node_string += self.net_interlude
+                    rvc_node_string += '( '
+                    rvc_node_string += '(1 0 0 0) (+{cos_term} -{sin_term} 0 0) '
+                    rvc_node_string += ')'
+                    rvc_node_string += self.net_postlude
 
                     target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
-                    net_file.write(rv_node_string.format(
-                        target_posterior='rv_'+target_posterior,
+                    net_file.write(rvc_node_string.format(
+                        target_posterior='rvc_'+target_posterior,
                         cos_term=self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)),
                         sin_term=self._to_cpp_complex_hash(cmath.sqrt(  op.gate.gamma))
                         ))
@@ -326,28 +325,28 @@ potential ( {target_posterior} | '''
 
                     qubit = op.qubits[0]
 
-                    rv_node_string = self.net_prelude_noise
+                    rvc_node_string = self.net_prelude_noise
                     depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
                     parent = 'n' + depth + 'q' + str(qubit).zfill(4)
-                    rv_node_string += parent + ' '
-                    rv_node_string += self.net_interlude
-                    rv_node_string += '( '
-                    rv_node_string += '(1 0 0 0) (+{cos_term} -{sin_term} 0 0) '
-                    rv_node_string += ')'
-                    rv_node_string += self.net_postlude
+                    rvc_node_string += parent + ' '
+                    rvc_node_string += self.net_interlude
+                    rvc_node_string += '( '
+                    rvc_node_string += '(1 0 0 0) (+{cos_term} -{sin_term} 0 0) '
+                    rvc_node_string += ')'
+                    rvc_node_string += self.net_postlude
 
                     node_string = self.net_prelude_qubit
-                    node_string += 'rv_{target_posterior} '
+                    node_string += 'rvc_{target_posterior} '
                     node_string += parent + ' '
                     node_string += self.net_interlude
                     node_string += '( '
-                    node_string += '((1 0)(0 1)) ((0 1)(1 0)) ((1 0)(0 1)) ((1 0)(0 1))'
+                    node_string += '((1 0)(0 1)) ((0 1)(1 0)) ((1 0)(0 1)) ((1 0)(0 1)) '
                     node_string += ')'
                     node_string += self.net_postlude
 
                     target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
-                    net_file.write(rv_node_string.format(
-                        target_posterior='rv_'+target_posterior,
+                    net_file.write(rvc_node_string.format(
+                        target_posterior='rvc_'+target_posterior,
                         cos_term=self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)),
                         sin_term=self._to_cpp_complex_hash(cmath.sqrt(  op.gate.gamma))
                         ))
@@ -357,25 +356,79 @@ potential ( {target_posterior} | '''
 
                     qubit_to_last_moment_index[qubit] = moment_index
 
-                elif protocols.has_mixture(op):
+                elif isinstance (op.gate,ops.GeneralizedAmplitudeDampingChannel):
+                    self._num_noise += 2
+
+                    qubit = op.qubits[0]
+
+                    rvm_node_string = self.net_prelude_noise
+                    rvm_node_string += self.net_interlude
+                    rvm_node_string += '( '
+                    rvm_node_string += '{i_term} {x_term} 0 0 '
+                    rvm_node_string += ')'
+                    rvm_node_string += self.net_postlude
+
+                    rvc_node_string = self.net_prelude_noise
+                    rvc_node_string += 'rvm_{target_posterior} '
+                    depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
+                    parent = 'n' + depth + 'q' + str(qubit).zfill(4)
+                    rvc_node_string += parent + ' '
+                    rvc_node_string += self.net_interlude
+                    rvc_node_string += '( '
+                    rvc_node_string += '((1 0 0 0) (+{cos_term} -{sin_term} 0 0)) '
+                    rvc_node_string += '((+{cos_term} -{sin_term} 0 0) (1 0 0 0)) '
+                    rvc_node_string += '((1 0 0 0) (1 0 0 0)) '
+                    rvc_node_string += '((1 0 0 0) (1 0 0 0)) '
+                    rvc_node_string += ')'
+                    rvc_node_string += self.net_postlude
+
+                    node_string = self.net_prelude_qubit
+                    node_string += 'rvc_{target_posterior} '
+                    depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
+                    parent = 'n' + depth + 'q' + str(qubit).zfill(4)
+                    node_string += parent + ' '
+                    node_string += self.net_interlude
+                    node_string += '( '
+                    node_string += '((1 0)(0 1)) ((0 1)(1 0)) ((1 0)(0 1)) ((1 0)(0 1)) '
+                    node_string += ')'
+                    node_string += self.net_postlude
+
+                    target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
+                    net_file.write(rvm_node_string.format(
+                        target_posterior='rvm_rvc_'+target_posterior,
+                        i_term=self._to_cpp_complex_hash(cmath.sqrt(  op.gate.p)),
+                        x_term=self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.p))
+                        ))
+                    net_file.write(rvc_node_string.format(
+                        target_posterior='rvc_'+target_posterior,
+                        cos_term=self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)),
+                        sin_term=self._to_cpp_complex_hash(cmath.sqrt(  op.gate.gamma))
+                        ))
+                    net_file.write(node_string.format(
+                        target_posterior=target_posterior
+                        ))
+
+                    qubit_to_last_moment_index[qubit] = moment_index
+
+                elif protocols.has_mixture(op) and 1<len(protocols.mixture(op)):
                     self._num_noise += 1
 
-                    rv_node_string = self.net_prelude_noise
-                    rv_node_string += self.net_interlude
-                    rv_node_string += '( '
+                    rvm_node_string = self.net_prelude_noise
+                    rvm_node_string += self.net_interlude
+                    rvm_node_string += '( '
                     for index in range(4):
                         if index<len(protocols.mixture(op)):
                             component = protocols.mixture(op)[index]
-                            rv_node_string += self._to_cpp_complex_hash(cmath.sqrt(component[0])) + ' '
+                            rvm_node_string += self._to_cpp_complex_hash(cmath.sqrt(component[0])) + ' '
                         else:
-                            rv_node_string += '0 '
-                    rv_node_string += ')'
-                    rv_node_string += self.net_postlude
+                            rvm_node_string += '0 '
+                    rvm_node_string += ')'
+                    rvm_node_string += self.net_postlude
 
                     qubit = op.qubits[0]
 
                     node_string = self.net_prelude_qubit
-                    node_string += 'rv_{target_posterior} '
+                    node_string += 'rvm_{target_posterior} '
                     parents=[]
                     depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
                     parent = 'n' + depth + 'q' + str(qubit).zfill(4)
@@ -394,8 +447,8 @@ potential ( {target_posterior} | '''
                     node_string += self.net_postlude
 
                     target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
-                    net_file.write(rv_node_string.format(
-                        target_posterior='rv_'+target_posterior,
+                    net_file.write(rvm_node_string.format(
+                        target_posterior='rvm_'+target_posterior,
                         ))
                     net_file.write(node_string.format(
                         target_posterior=target_posterior,
@@ -455,13 +508,13 @@ potential ( {target_posterior} | '''
             # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e: Equal probabilities are encoded is incompatible with dtbnorders
         else:
-            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -c -d -a -b -i circuit.net -w -s')
+            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -b -i circuit.net -w -s')
             # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e and -b used together causes moment steps simulation to fail
             # -c incompatible with noise mixtures becausethere is no mutal exclusive constraints on noise possibilities
         # print (stdout)
 
-        self._node_re_compile = re.compile(r'cc\$I\$(\d+)\$1.0\$X\$n(\d+)q(\d+)\$') # are negative literals and opt bool valid?
+        self._node_re_compile = re.compile(r'cc\$I\$(\d+)\$1.0\$\+\$n(\d+)q(\d+)\$') # are negative literals and opt bool valid?
         self._int_re_compile = re.compile(r'cc\$C\$\d+\$(\d+)')
         existentially_quantified_variables = []
         with open('circuit.net.cnf', 'r') as cnf_file:
@@ -490,10 +543,10 @@ potential ( {target_posterior} | '''
             for _ in range(1):
                 stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -simplify_s -in circuit.net.cnf -visualize')
                 if not self._intermediate:
-                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 2 -exist variables.file -reduce -in circuit.net.cnf_simplified -smooth -visualize')
-                    # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3 -exist variables.file -reduce -in circuit.net.cnf_simplified -minimize -suppress_ane -determined circuit.net.pmap')
+                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -in circuit.net.cnf_simplified -exist variables.file -suppress_ane -reduce -visualize')
+                    # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -in circuit.net.cnf_simplified -exist variables.file -dt_method 3 -determined circuit.net.pmap -suppress_ane -reduce -minimize')
                 else:
-                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -dt_method 3                       -reduce -in circuit.net.cnf_simplified -smooth -visualize')
+                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -in circuit.net.cnf_simplified -dt_method 3 -reduce -visualize')
                 # stdout = os.system('/n/fs/qdb/qACE/miniC2D-1.0.0/bin/linux/miniC2D -c circuit.net.cnf_simplified')
                 # print (stdout)
                 currFileSize = os.path.getsize('circuit.net.cnf_simplified.nnf')
@@ -504,7 +557,7 @@ potential ( {target_posterior} | '''
 
             # Build the evaluator for the arithmetic circuit
             stdout = os.system('mkdir evaluator')
-            stdout = os.system('javac -d evaluator -cp /n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar -Xlint:unchecked /n/fs/qdb/Google/Cirq/cirq/sim/Evaluator.java /n/fs/qdb/qACE/org/apache/commons/math3/complex/ComplexFormat.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngine.java /n/fs/qdb/qACE/aceEvalComplexSrc/Calculator.java /n/fs/qdb/qACE/aceEvalComplexSrc/Evidence.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngineMixed.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorNormal.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorLogE.java /n/fs/qdb/qACE/aceEvalComplexSrc/UnderflowException.java')
+            stdout = os.system('javac -d evaluator -cp /n/fs/qdb/qACE/commons-math3-3.6.1/commons-math3-3.6.1.jar -Xlint:unchecked /n/fs/qdb/Google/Cirq/cirq/sim/Evaluator.java /n/fs/qdb/qACE/org/apache/commons/math3/complex/ComplexFormat.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngine.java /n/fs/qdb/qACE/aceEvalComplexSrc/Calculator.java /n/fs/qdb/qACE/aceEvalComplexSrc/Evidence.java /n/fs/qdb/qACE/aceEvalComplexSrc/OnlineEngineSop.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorNormal.java /n/fs/qdb/qACE/aceEvalComplexSrc/CalculatorLogE.java /n/fs/qdb/qACE/aceEvalComplexSrc/UnderflowException.java')
             # print (stdout)
 
             # Launch the evaluator in a subprocess
@@ -600,7 +653,7 @@ potential ( {target_posterior} | '''
         for amplitude_index in self._amplitude_indices:
             self._subprocess.stdin.write(f'cc$A${amplitude_index}\n'.encode())
 
-        return wave_function_simulator.SimulatesIntermediateWaveFunction.compute_amplitudes_sweep(
+        return state_vector_simulator.SimulatesIntermediateStateVector.compute_amplitudes_sweep(
             self, program, bitstrings, params, qubit_order)
 
     def simulate_sweep(
@@ -613,7 +666,7 @@ potential ( {target_posterior} | '''
         """Simulates the supplied Circuit or Schedule.
 
         This method returns a result which allows access to the entire
-        wave function. In contrast to simulate, this allows for sweeping
+        state vector. In contrast to simulate, this allows for sweeping
         over different parameter values.
 
         Args:
@@ -754,10 +807,12 @@ potential ( {target_posterior} | '''
 
                             if self._intermediate:
                                 match = self._node_re_compile.match(line)
-                                if match and int(match.group(2))<moment_index:
-                                    line = re.sub('X', '+', line)
-                                elif match and moment_index<int(match.group(2)):
-                                    line = re.sub('X', 'I', line)
+                                # if match and int(match.group(2))<moment_index:
+                                #     line = re.sub('X', '+', line)
+                                # elif match and moment_index<int(match.group(2)):
+                                #     line = re.sub('X', 'I', line)
+                                if match and moment_index<int(match.group(2)):
+                                    line = re.sub(r'\+', 'I', line)
 
                             self._subprocess.stdin.write(line.encode())
 
