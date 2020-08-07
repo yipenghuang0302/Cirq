@@ -104,7 +104,7 @@ def main():
 
     # Measure the result.
     circuit.append(cirq.measure(*input_qubits, key='result'))
-    kc_simulator = cirq.KnowledgeCompilationSimulator(circuit,intermediate=False)
+    kc_simulator = cirq.KnowledgeCompilationSimulator(circuit,intermediate=True)
     kc_result = kc_simulator.simulate(circuit)
 
     np.testing.assert_almost_equal(

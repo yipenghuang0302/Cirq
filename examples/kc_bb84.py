@@ -127,7 +127,7 @@ def main(num_qubits=8):
     # Run simulations.
     repetitions = 1
 
-    result = cirq.KnowledgeCompilationSimulator(circuit).run(program=circuit, repetitions=repetitions)
+    result = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True).run(program=circuit, repetitions=repetitions)
     print("result=")
     print(result)
     result_bitstring = bitstring(
@@ -166,7 +166,7 @@ def main(num_qubits=8):
 
     # Run simulations.
     repetitions = 1
-    result = cirq.KnowledgeCompilationSimulator(alice_eve_circuit).run(program=alice_eve_circuit,
+    result = cirq.KnowledgeCompilationSimulator(alice_eve_circuit, intermediate=True).run(program=alice_eve_circuit,
                                   repetitions=repetitions)
     eve_state = [int(result.measurements[str(i)]) for i in range(num_qubits)]
 
@@ -175,7 +175,7 @@ def main(num_qubits=8):
 
     # Run simulations.
     repetitions = 1
-    result = cirq.KnowledgeCompilationSimulator(eve_bob_circuit).run(program=eve_bob_circuit,
+    result = cirq.KnowledgeCompilationSimulator(eve_bob_circuit, intermediate=True).run(program=eve_bob_circuit,
                                   repetitions=repetitions)
     result_bitstring = bitstring(
         [int(result.measurements[str(i)]) for i in range(num_qubits)])

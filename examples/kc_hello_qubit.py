@@ -60,17 +60,17 @@ def main():
         print("random_circuit:")
         print(random_circuit)
 
-        noise = cirq.ConstantQubitNoiseModel(cirq.asymmetric_depolarize(0.2,0.3,0.4)) # mixture: size four noise not implemented
+        # noise = cirq.ConstantQubitNoiseModel(cirq.asymmetric_depolarize(0.2,0.3,0.4)) # mixture: size four noise not implemented
         # noise = cirq.ConstantQubitNoiseModel(cirq.depolarize(0.1)) # mixture: size four noise not implemented
         # noise = cirq.ConstantQubitNoiseModel(cirq.phase_flip(0.1)) # mixture: works well
         # noise = cirq.ConstantQubitNoiseModel(cirq.bit_flip(0.1)) # mixture: works well
 
-        # noise = cirq.ConstantQubitNoiseModel(cirq.generalized_amplitude_damp(9/25,49/625)) # channel: size four noise not implemented
+        noise = cirq.ConstantQubitNoiseModel(cirq.generalized_amplitude_damp(9/25,49/625)) # channel: size four noise not implemented
         # noise = cirq.ConstantQubitNoiseModel(cirq.amplitude_damp(0.1)) # channel:
         # noise = cirq.ConstantQubitNoiseModel(cirq.phase_damp(0.1)) # channel:
         # reset?
 
-        kc_simulator = cirq.KnowledgeCompilationSimulator(random_circuit, noise=noise)
+        kc_simulator = cirq.KnowledgeCompilationSimulator(random_circuit, noise=noise, intermediate=True)
         dm_simulator = cirq.DensityMatrixSimulator(noise=noise)
 
         for initial_state in range(3):

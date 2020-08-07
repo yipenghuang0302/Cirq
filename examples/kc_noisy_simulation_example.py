@@ -18,7 +18,7 @@ def noisy_circuit_demo(amplitude_damp):
     kc_circuit = cirq.Circuit(
         cirq.amplitude_damp(amplitude_damp)(q),
     )
-    kc_result = cirq.KnowledgeCompilationSimulator(kc_circuit,initial_state=1,intermediate=True).simulate(kc_circuit)
+    kc_result = cirq.KnowledgeCompilationSimulator(kc_circuit,initial_state=1,intermediate=False).simulate(kc_circuit)
 
     print("dm_result.final_density_matrix")
     print(dm_result.final_density_matrix)
