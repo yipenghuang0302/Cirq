@@ -108,6 +108,126 @@ public class Evaluator {
 
           // for ( int iter=0; iter<g.repetitions; iter++ ) {
           //
+          //   // PROGRESSIVE SAMPLING APPROACH
+          //
+          //   evidence.retractAll();
+          //
+          //   // for (short qubitProgress = 0; qubitProgress<qubitCount; qubitProgress++) {
+          //   //   int varForQubit = qubitFinalToVar[qubitProgress];
+          //   //   if (g.fSrcVarToSrcValToIndicator[varForQubit][0]>0)
+          //   //     g.logicVarToElimOp[g.fSrcVarToSrcValToIndicator[varForQubit][0]] = OnlineEngine.ElimOp.INVALID;
+          //   //   g.logicVarToElimOp[g.fSrcVarToSrcValToIndicator[varForQubit][1]] = OnlineEngine.ElimOp.INVALID;
+          //   // }
+          //
+          //   byte[] noiseArray = new byte[noiseCount];
+          //
+          //   // for (short qubitProgress = 0; qubitProgress<qubitCount; qubitProgress++) {
+          //   for (short noiseProgress = (short)(noiseCount-1); 0<=noiseProgress; noiseProgress--) {
+          //
+          //     int varForNoise = noiseRVToVar[noiseProgress];
+          //
+          //     evidence.varCommit(varForNoise, 0);
+          //     g.evaluate(evidence);
+          //     Complex amplitude_0 = g.evaluationResults();
+          //     double partial_0 = amplitude_0.abs() * amplitude_0.abs();
+          //     // System.out.println("partial_0 = " + partial_0);
+          //
+          //     evidence.varCommit(varForNoise, 1);
+          //     g.evaluate(evidence);
+          //     Complex amplitude_1 = g.evaluationResults();
+          //     double partial_1 = amplitude_1.abs() * amplitude_1.abs();
+          //     // System.out.println("partial_1 = " + partial_1);
+          //
+          //     evidence.varCommit(varForNoise, 2);
+          //     g.evaluate(evidence);
+          //     Complex amplitude_2 = g.evaluationResults();
+          //     double partial_2 = amplitude_2.abs() * amplitude_2.abs();
+          //     // System.out.println("partial_2 = " + partial_2);
+          //
+          //     evidence.varCommit(varForNoise, 3);
+          //     g.evaluate(evidence);
+          //     Complex amplitude_3 = g.evaluationResults();
+          //     double partial_3 = amplitude_3.abs() * amplitude_3.abs();
+          //     // System.out.println("partial_3 = " + partial_3);
+          //
+          //     if (partial_0+partial_1+partial_2+partial_3==0.0) {
+          //       throw new Exception("Progressive sampling probability is NaN.");
+          //     }
+          //
+          //     double prob_0 = partial_0/(partial_0+partial_1+partial_2+partial_3);
+          //     double prob_1 = partial_1/(partial_0+partial_1+partial_2+partial_3);
+          //     double prob_2 = partial_2/(partial_0+partial_1+partial_2+partial_3);
+          //     double prob_3 = partial_3/(partial_0+partial_1+partial_2+partial_3);
+          //
+          //     double rand = ThreadLocalRandom.current().nextDouble();
+          //
+          //     if ( rand <= prob_0 ) {
+          //       // System.out.println("evidence.varCommit(varForNoise, 0);");
+          //       evidence.varCommit(varForNoise, 0);
+          //       noiseArray[noiseProgress] = 0;
+          //     } else if ( rand <= prob_0+prob_1 ) {
+          //       // System.out.println("evidence.varCommit(varForNoise, 1);");
+          //       evidence.varCommit(varForNoise, 1);
+          //       noiseArray[noiseProgress] = 1;
+          //     } else if ( rand <= prob_0+prob_1+prob_2 ) {
+          //       // System.out.println("evidence.varCommit(varForNoise, 2);");
+          //       evidence.varCommit(varForNoise, 2);
+          //       noiseArray[noiseProgress] = 2;
+          //     } else {
+          //       // System.out.println("evidence.varCommit(varForNoise, 3);");
+          //       evidence.varCommit(varForNoise, 3);
+          //       noiseArray[noiseProgress] = 3;
+          //     }
+          //   }
+          //
+          //   long outputQubitString = 0L;
+          //
+          //   // for (short qubitProgress = 0; qubitProgress<qubitCount; qubitProgress++) {
+          //   for (short qubitProgress = (short)(qubitCount-1); 0<=qubitProgress; qubitProgress--) {
+          //
+          //     int varForQubit = qubitFinalToVar[qubitProgress];
+          //     // if (g.fSrcVarToSrcValToIndicator[varForQubit][0]>0)
+          //     //   g.logicVarToElimOp[g.fSrcVarToSrcValToIndicator[varForQubit][0]] = OnlineEngine.ElimOp.ADD;
+          //     // g.logicVarToElimOp[g.fSrcVarToSrcValToIndicator[varForQubit][1]] = OnlineEngine.ElimOp.ADD;
+          //
+          //     evidence.varCommit(varForQubit, 0);
+          //     g.evaluate(evidence);
+          //     Complex amplitude_0 = g.evaluationResults();
+          //     double partial_0 = amplitude_0.abs() * amplitude_0.abs();
+          //     // System.out.println("partial_0 = " + partial_0);
+          //
+          //     evidence.varCommit(varForQubit, 1);
+          //     g.evaluate(evidence);
+          //     Complex amplitude_1 = g.evaluationResults();
+          //     double partial_1 = amplitude_1.abs() * amplitude_1.abs();
+          //     // System.out.println("partial_1 = " + partial_1);
+          //
+          //     double probability = partial_1/(partial_0+partial_1);
+          //     // System.out.println("probability = " + probability);
+          //
+          //     if (Double.isNaN(probability)) {
+          //       outputQubitString = ThreadLocalRandom.current().nextLong( 1L<<qubitCount );
+          //       throw new Exception("Progressive sampling probability is NaN.");
+          //     } else {
+          //       if ( ThreadLocalRandom.current().nextDouble() <= probability ) {
+          //         evidence.varCommit(varForQubit, 1);
+          //         outputQubitString |=  (1L << (qubitCount-qubitProgress-1));
+          //       } else {
+          //         evidence.varCommit(varForQubit, 0);
+          //         outputQubitString &= ~(1L << (qubitCount-qubitProgress-1));
+          //       }
+          //     }
+          //
+          //   }
+          //
+          //   // System.out.println(noiseArray+","+outputQubitString);
+          //   csv.write(noiseArray+","+outputQubitString);
+          //   csv.newLine();
+          //
+          // }
+
+          // DIRECT SAMPLING APPROACH
+
           //   byte[] noiseArray = new byte[noiseCount];
           //   g.evaluate(evidence);
           //   // System.out.println("g.evaluationResults()=");
@@ -149,6 +269,8 @@ public class Evaluator {
           //   csv.newLine();
           //
           // }
+
+          // MCMC APPROACH
 
           byte[] noiseArray = new byte[noiseCount];
           for (short noise=0; noise<noiseCount; noise++) {
@@ -324,6 +446,9 @@ public class Evaluator {
     double prob_2 = partial_2/(partial_0+partial_1+partial_2+partial_3);
     double prob_3 = partial_3/(partial_0+partial_1+partial_2+partial_3);
 
+    if (partial_0+partial_1+partial_2+partial_3==0.0)
+      throw new Exception("noise Gibbs sampling transition probability is NaN.");
+
     double rand = ThreadLocalRandom.current().nextDouble();
     if ( rand <= prob_0 ) {
       noiseArray[randomNoise] = 0;
@@ -413,7 +538,7 @@ public class Evaluator {
     // System.out.println("probability = " + probability);
     if (Double.isNaN(probability)) {
       outputQubitString = ThreadLocalRandom.current().nextLong( 1L<<qubitCount );
-      // throw new Exception("Gibbs sampling transition probability is NaN.");
+      throw new Exception("qubit Gibbs sampling transition probability is NaN.");
     } else {
       if ( ThreadLocalRandom.current().nextDouble() <= probability ) {
         outputQubitString |=  (1L << (qubitCount-randomQubit-1));
