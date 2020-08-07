@@ -508,7 +508,7 @@ potential ( {target_posterior} | '''
             # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e: Equal probabilities are encoded is incompatible with dtbnorders
         else:
-            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -b -i circuit.net -w -s')
+            stdout = os.system('/n/fs/qdb/bayes-to-cnf/bin/bn-to-cnf -d -a -i circuit.net -w -s')
             # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e and -b used together causes moment steps simulation to fail
             # -c incompatible with noise mixtures becausethere is no mutal exclusive constraints on noise possibilities
@@ -540,13 +540,13 @@ potential ( {target_posterior} | '''
         try:
             # Conjunctive normal form to arithmetic circuit
             bestFileSize = sys.maxsize
-            for _ in range(1):
+            for _ in range(4):
                 stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -simplify_s -in circuit.net.cnf -visualize')
                 if not self._intermediate:
                     stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -in circuit.net.cnf_simplified -exist variables.file -suppress_ane -reduce -visualize')
                     # stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -in circuit.net.cnf_simplified -exist variables.file -dt_method 3 -determined circuit.net.pmap -suppress_ane -reduce -minimize')
                 else:
-                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -in circuit.net.cnf_simplified -dt_method 3 -reduce -visualize')
+                    stdout = os.system('/n/fs/qdb/qACE/ace_v3.0_linux86/c2d_linux -in circuit.net.cnf_simplified -dt_method 3 -suppress_ane -reduce -visualize')
                 # stdout = os.system('/n/fs/qdb/qACE/miniC2D-1.0.0/bin/linux/miniC2D -c circuit.net.cnf_simplified')
                 # print (stdout)
                 currFileSize = os.path.getsize('circuit.net.cnf_simplified.nnf')
@@ -727,20 +727,20 @@ potential ( {target_posterior} | '''
         # print(param_resolver)
 
         if len(self._circuit) == 0:
-            yield sparse_simulator.SparseSimulatorStep(
-                qis.to_valid_state_vector(initial_state,self._num_qubits,dtype=self._dtype),
-                {},
-                self._qubit_map,
-                self._dtype)
-            # yield density_matrix_simulator.DensityMatrixStepResult(
-            #     density_matrix=qis.to_valid_density_matrix(
-            #         initial_state,
-            #         self._num_qubits,
-            #         qid_shape=protocols.qid_shape(self._qubits),
-            #         dtype=self._dtype),
-            #     measurements={},
-            #     qubit_map=self._qubit_map,
-            #     dtype=self._dtype)
+            # yield sparse_simulator.SparseSimulatorStep(
+            #     qis.to_valid_state_vector(initial_state,self._num_qubits,dtype=self._dtype),
+            #     {},
+            #     self._qubit_map,
+            #     self._dtype)
+            yield density_matrix_simulator.DensityMatrixStepResult(
+                density_matrix=qis.to_valid_density_matrix(
+                    initial_state,
+                    self._num_qubits,
+                    qid_shape=protocols.qid_shape(self._qubits),
+                    dtype=self._dtype),
+                measurements={},
+                qubit_map=self._qubit_map,
+                dtype=self._dtype)
 
         else:
 
@@ -929,25 +929,25 @@ potential ( {target_posterior} | '''
                     # print("post time = ")
                     # print(time.time() - post_start)
 
-                    yield sparse_simulator.SparseSimulatorStep(
-                        state_vector=state_vector,
-                        measurements=measurements,
-                        qubit_map=self._qubit_map,
-                        dtype=self._dtype)
-                    # print("measurements=")
-                    # print(measurements)
-                    # yield density_matrix_simulator.DensityMatrixStepResult(
-                    #     density_matrix=density_matrix,
+                    # yield sparse_simulator.SparseSimulatorStep(
+                    #     state_vector=state_vector,
                     #     measurements=measurements,
                     #     qubit_map=self._qubit_map,
                     #     dtype=self._dtype)
+                    # print("measurements=")
+                    # print(measurements)
+                    yield density_matrix_simulator.DensityMatrixStepResult(
+                        density_matrix=density_matrix,
+                        measurements=measurements,
+                        qubit_map=self._qubit_map,
+                        dtype=self._dtype)
 
-    # def _create_simulator_trial_result(self,
-    #         params: study.ParamResolver,
-    #         measurements: Dict[str, np.ndarray],
-    #         final_simulator_state: 'DensityMatrixSimulatorState') \
-    #         -> 'DensityMatrixTrialResult':
-    #     return density_matrix_simulator.DensityMatrixTrialResult(
-    #         params=params,
-    #         measurements=measurements,
-    #         final_simulator_state=final_simulator_state)
+    def _create_simulator_trial_result(self,
+            params: study.ParamResolver,
+            measurements: Dict[str, np.ndarray],
+            final_simulator_state: 'DensityMatrixSimulatorState') \
+            -> 'DensityMatrixTrialResult':
+        return density_matrix_simulator.DensityMatrixTrialResult(
+            params=params,
+            measurements=measurements,
+            final_simulator_state=final_simulator_state)
