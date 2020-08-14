@@ -12,14 +12,19 @@ import numpy as np
 import numbers, cmath, sympy
 
 from unittest import mock
+import itertools
 import random
+
+class MultiHTestGate(cirq.TwoQubitGate):
+    def _decompose_(self, qubits):
+        return cirq.H.on_each(*qubits)
 
 def main():
 
     q0, q1 = cirq.LineQubit.range(2)
     circuit_no_meas = cirq.Circuit(
         cirq.H(q0),
-        cirq.phase_damp(9/25)(q0),
+        cirq.phase_flip(9/25)(q0),
         cirq.CNOT(q0,q1),
     )
 

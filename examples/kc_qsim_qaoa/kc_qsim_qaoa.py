@@ -76,8 +76,8 @@ kc_smp_time_dict = {}
 
 def main(p=1):
 
-    for max_length in range(6,32,2):
-        for p in range(1,3):
+    for max_length in range(26,32,2):
+        for p in range(3,4):
 
             vertices = []
             for n in range(4,max_length,2):
@@ -92,7 +92,7 @@ def main(p=1):
                 kc_smp_time_dict[n] = []
 
                 for _ in range(2):
-                    trial(n=n,p=p,repetitions=256*n)
+                    trial(n=n,p=p,repetitions=1000)
 
             qs_smp_01_time_mean = []
             # qs_smp_02_time_mean = []

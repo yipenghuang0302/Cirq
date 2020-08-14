@@ -24,8 +24,8 @@ kc_smp_time_dict = {}
 
 def main():
 
-    for max_length in range(5,7):
-        for steps in range(1,3):
+    for max_length in range(7,8):
+        for steps in range(1,4):
 
             grid_points = []
             for length in range(2,max_length):

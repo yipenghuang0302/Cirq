@@ -446,8 +446,8 @@ public class Evaluator {
     double prob_2 = partial_2/(partial_0+partial_1+partial_2+partial_3);
     double prob_3 = partial_3/(partial_0+partial_1+partial_2+partial_3);
 
-    if (partial_0+partial_1+partial_2+partial_3==0.0)
-      throw new Exception("noise Gibbs sampling transition probability is NaN.");
+    // if (partial_0+partial_1+partial_2+partial_3==0.0)
+    //   throw new Exception("noise Gibbs sampling transition probability is NaN.");
 
     double rand = ThreadLocalRandom.current().nextDouble();
     if ( rand <= prob_0 ) {
@@ -538,7 +538,7 @@ public class Evaluator {
     // System.out.println("probability = " + probability);
     if (Double.isNaN(probability)) {
       outputQubitString = ThreadLocalRandom.current().nextLong( 1L<<qubitCount );
-      throw new Exception("qubit Gibbs sampling transition probability is NaN.");
+      // throw new Exception("qubit Gibbs sampling transition probability is NaN.");
     } else {
       if ( ThreadLocalRandom.current().nextDouble() <= probability ) {
         outputQubitString |=  (1L << (qubitCount-randomQubit-1));

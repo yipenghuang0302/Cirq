@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import itertools
 import random
 from unittest import mock
 import numpy as np
@@ -104,7 +105,15 @@ def test_run_measure_at_end_no_repetitions(dtype):
                     '1': np.empty([0, 1])
                 })
                 assert result.repetitions == 0
+                # We expect one call per b0,b1.
                 assert mock_sim.call_count == 0
+
+
+def test_run_repetitions_terminal_measurement_stochastic():
+    q = cirq.LineQubit(0)
+    c = cirq.Circuit(cirq.H(q), cirq.measure(q, key='q'))
+    results = cirq.KnowledgeCompilationSimulator(c).run(c, repetitions=10000)
+    assert 1000 <= sum(v[0] for v in results.measurements['q']) < 9000
 
 
 @pytest.mark.parametrize('dtype', [np.complex64, np.complex128])
@@ -123,6 +132,7 @@ def test_run_repetitions_measure_at_end(dtype):
                 np.testing.assert_equal(result.measurements,
                                         {'0': [[b0]] * 3, '1': [[b1]] * 3})
                 assert result.repetitions == 3
+                # We expect one call per b0,b1.
                 assert mock_sim.call_count == 1
 
 
@@ -143,6 +153,7 @@ def test_run_invert_mask_measure_not_terminal(dtype):
                 np.testing.assert_equal(result.measurements,
                                         {'m': [[1 - b0, b1]] * 3})
                 assert result.repetitions == 3
+                # We expect repeated calls per b0,b1 instead of one call.
                 assert mock_sim.call_count == 3
 
 
@@ -163,6 +174,7 @@ def test_run_partial_invert_mask_measure_not_terminal(dtype):
                 np.testing.assert_equal(result.measurements,
                                         {'m': [[1 - b0, b1]] * 3})
                 assert result.repetitions == 3
+                # We expect repeated calls per b0,b1 instead of one call.
                 assert mock_sim.call_count == 3
 
 
@@ -184,6 +196,7 @@ def test_run_measurement_not_terminal_no_repetitions(dtype):
                     '1': np.empty([0, 1])
                 })
                 assert result.repetitions == 0
+                # We expect one call per b0,b1 instead of one call.
                 assert mock_sim.call_count == 0
 
 
@@ -205,6 +218,7 @@ def test_run_repetitions_measurement_not_terminal(dtype):
                 np.testing.assert_equal(result.measurements,
                                         {'0': [[b0]] * 3, '1': [[b1]] * 3})
                 assert result.repetitions == 3
+                # We expect repeated calls per b0,b1 instead of one call.
                 assert mock_sim.call_count == 3
 
 
@@ -231,8 +245,7 @@ def test_run_mixture(dtype):
     circuit = cirq.Circuit(cirq.bit_flip(0.5)(q0), cirq.measure(q0))
     simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
     result = simulator.run(circuit, repetitions=100)
-    assert sum(result.measurements['0'])[0] < 80
-    assert sum(result.measurements['0'])[0] > 20
+    assert 20 < sum(result.measurements['0'])[0] < 80
 
 
 @pytest.mark.parametrize('dtype', [np.complex64, np.complex128])
@@ -691,14 +704,14 @@ def test_simulate_measurement_inversions():
     assert cirq.KnowledgeCompilationSimulator(c).simulate(c).measurements == {'q': np.array([False])}
 
 
-def test_works_on_pauli_string_phasor():
-    a, b = cirq.LineQubit.range(2)
-    c = cirq.Circuit(np.exp(1j * np.pi * cirq.X(a) * cirq.X(b)))
-    sim = cirq.KnowledgeCompilationSimulator(c, intermediate=True)
-    result = sim.simulate(c).state_vector()
-    np.testing.assert_allclose(result.reshape(4),
-                               np.array([0, 0, 0, 1j]),
-                               atol=1e-8)
+# def test_works_on_pauli_string_phasor():
+#     a, b = cirq.LineQubit.range(2)
+#     c = cirq.Circuit(np.exp(0.5j * np.pi * cirq.X(a) * cirq.X(b)))
+#     sim = cirq.KnowledgeCompilationSimulator(c, intermediate=True)
+#     result = sim.simulate(c).state_vector()
+#     np.testing.assert_allclose(result.reshape(4),
+#                                np.array([0, 0, 0, 1j]),
+#                                atol=1e-8)
 
 
 def test_works_on_pauli_string():
@@ -913,3 +926,104 @@ def test_random_seed_non_terminal_measurements_deterministic():
 #                   [[1], [0], [0], [0], [1], [0], [0], [1], [1], [1], [1], [1],
 #                    [0], [1], [0], [0], [0], [0], [0], [1], [0], [1], [1], [0],
 #                    [1], [1], [1], [1], [1], [0]])
+
+
+def test_entangled_reset_does_not_break_randomness():
+    """
+    A previous version of cirq made the mistake of assuming that it was okay to
+    cache the wavefunction produced by general channels on unrelated qubits
+    before repeatedly sampling measurements. This test checks for that mistake.
+    """
+
+    a, b = cirq.LineQubit.range(2)
+    circuit = cirq.Circuit(cirq.H(a), cirq.CNOT(a, b),
+                           cirq.ResetChannel().on(a), cirq.measure(b,
+                                                                   key='out'))
+    samples = cirq.KnowledgeCompilationSimulator(circuit).sample(circuit, repetitions=100)['out']
+    counts = samples.value_counts()
+    assert len(counts) == 2
+    assert 10 <= counts[0] <= 90
+    assert 10 <= counts[1] <= 90
+
+
+# def test_overlapping_measurements_at_end():
+#     a, b = cirq.LineQubit.range(2)
+#     circuit = cirq.Circuit(
+#         cirq.H(a),
+#         cirq.CNOT(a, b),
+#
+#         # These measurements are not on independent qubits but they commute.
+#         cirq.measure(a, key='a'),
+#         cirq.measure(a, key='not a', invert_mask=(True,)),
+#         cirq.measure(b, key='b'),
+#         cirq.measure(a, b, key='ab'),
+#     )
+#
+#     samples = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True).sample(circuit, repetitions=100)
+#     np.testing.assert_array_equal(samples['a'].values,
+#                                   samples['not a'].values ^ 1)
+#     np.testing.assert_array_equal(samples['a'].values * 2 + samples['b'].values,
+#                                   samples['ab'].values)
+#
+#     counts = samples['b'].value_counts()
+#     assert len(counts) == 2
+#     assert 10 <= counts[0] <= 90
+#     assert 10 <= counts[1] <= 90
+
+
+def test_separated_measurements():
+    a, b = cirq.LineQubit.range(2)
+    c = cirq.Circuit([
+        cirq.H(a),
+        cirq.H(b),
+        cirq.CZ(a, b),
+        cirq.measure(a, key=''),
+        cirq.CZ(a, b),
+        cirq.H(b),
+        cirq.measure(b, key='zero'),
+    ])
+    sample = cirq.KnowledgeCompilationSimulator(c, intermediate=True).sample(c, repetitions=10)
+    np.testing.assert_array_equal(sample['zero'].values, [0] * 10)
+
+
+# def test_state_vector_copy():
+#
+#     class InplaceGate(cirq.SingleQubitGate):
+#         """A gate that modifies the target tensor in place, multiply by -1."""
+#
+#         def _apply_unitary_(self, args):
+#             args.target_tensor *= -1.0
+#             return args.target_tensor
+#
+#     q = cirq.LineQubit(0)
+#     circuit = cirq.Circuit(InplaceGate()(q), InplaceGate()(q))
+#     sim = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True)
+#
+#     vectors = []
+#     for step in sim.simulate_moment_steps(circuit):
+#         vectors.append(step.state_vector(copy=True))
+#     for x, y in itertools.combinations(vectors, 2):
+#         assert not np.shares_memory(x, y)
+#
+#     # If the state vector is not copied, then applying second InplaceGate
+#     # causes old state to be modified.
+#     vectors = []
+#     copy_of_vectors = []
+#     for step in sim.simulate_moment_steps(circuit):
+#         state_vector = step.state_vector(copy=False)
+#         vectors.append(state_vector)
+#         copy_of_vectors.append(state_vector.copy())
+#     assert any(
+#         not np.array_equal(x, y) for x, y in zip(vectors, copy_of_vectors))
+
+
+# def test_final_state_vector_is_not_last_object():
+#
+#     q = cirq.LineQubit(0)
+#     initial_state = np.array([1, 0], dtype=np.complex64)
+#     circuit = cirq.Circuit(cirq.WaitGate(0)(q))
+#     sim = cirq.KnowledgeCompilationSimulator(circuit)
+#     result = sim.simulate(circuit, initial_state=initial_state)
+#     assert result.state_vector() is not initial_state
+#     assert not np.shares_memory(result.state_vector(), initial_state)
+#     np.testing.assert_equal(result.state_vector(), initial_state)
