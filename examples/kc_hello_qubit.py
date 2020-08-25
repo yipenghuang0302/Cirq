@@ -9,84 +9,28 @@ m=11000111111011001000
 
 import cirq
 import qsimcirq
-
-import qflexcirq.interface.qflex_simulator as qsim
-import qflexcirq.interface.qflex_virtual_device as qdevice
-import qflexcirq.interface.qflex_grid as qgrid
-import qflexcirq.interface.qflex_circuit as qcirc
-import qflexcirq.interface.qflex_order as qorder
-
-import qflexcirq.utils as qflexutils
-
-from qflexcirq import qflex
+import os
+import re
 
 import numpy as np
 import math
 
-config_small = {
-    'circuit_filename': '/common/users/yh804/research/Google/qflex/config/circuits/rectangular_2x2_1-2-1_0.txt',
-    'ordering_filename': '/common/users/yh804/research/Google/qflex/config/ordering/rectangular_2x2.txt',
-    'grid_filename': '/common/users/yh804/research/Google/qflex/config/grid/rectangular_2x2.txt',
-    'final_state': "0110"
-}
-
 def main():
 
-    q0,q1,q2,q3 = cirq.GridQubit(0, 0), cirq.GridQubit(0, 1), cirq.GridQubit(1, 0), cirq.GridQubit(1, 1) # cirq.LineQubit.range(4)
-    for iteration in range(4):
-        random_circuit = cirq.testing.random_circuit(qubits=[q0,q1,q2,q3],
+    q0,q1,q2 = cirq.LineQubit.range(3)
+    for iteration in range(16):
+        random_circuit = cirq.testing.random_circuit(qubits=[q0,q1,q2],
                                                      n_moments=32,
                                                      op_density=0.99)
 
-        print(cirq.qasm(random_circuit))
-
-
-        my_grid = qgrid.QFlexGrid.from_existing_file(config_small['grid_filename'])
-        my_device = qdevice.QFlexVirtualDevice(qflex_grid=my_grid)
-        my_order = qorder.QFlexOrder.from_existing_file(config_small["ordering_filename"])
-
-
-        # circuit_on_device = qcirc.QFlexCircuit(cirq_circuit=random_circuit,
-        #                                        device=my_device,
-        #                                        qflex_order=my_order,
-        #                                        allow_decomposition=True)
         cirq.ConvertToCzAndSingleGates().optimize_circuit(random_circuit) # cannot work with params
         cirq.ExpandComposite().optimize_circuit(random_circuit)
-
-
         qs_circuit = qsimcirq.QSimCircuit(random_circuit)
-
-
-
-
-        # The qubits are collected and indexed from the underlying grid_string
-        # that was passed as constructor to the Device
-        my_qubits = my_device.get_indexed_grid_qubits()
-
-        # Take a QFlex circuit and generate a Cirq circuit from it
-        # The Cirq circuit will be afterwards transformed into a Qflex circuit
-        # You can construct a Cirq circuit from an existing QFlex circuit
-        # Note that circuits provided in files were designed for a specific arrangement
-        # my_circuit = qflexutils.GetCircuitOfMoments(config_small["circuit_filename"],
-                                                    # my_qubits)
-
-
-
-        print("\nRunning QFlex simulation\n")
-
-        my_sim = qsim.QFlexSimulator()
-        # myres = my_sim.compute_amplitudes(program=circuit_on_device,
-        #                                   bitstrings=[config_small['final_state']])
-        # print(myres)
-
-        print("\nRunning Pybind Interface\n")
-        print(qflex.simulate(config_small))
-
-
+        random_circuit._to_quil_output().save_to_file('kc_hello_qubit.quil')
 
         qs_simulator = qsimcirq.QSimSimulator(qsim_options={'t': 16, 'v': 2})
         qs_result = qs_simulator.simulate(qs_circuit)
-        assert qs_result.state_vector().shape == (16,)
+        assert qs_result.state_vector().shape == (8,)
         kc_simulator = cirq.KnowledgeCompilationSimulator(random_circuit)
         kc_result = kc_simulator.simulate(random_circuit)
         print("qs_result.state_vector()")
@@ -99,8 +43,54 @@ def main():
             rtol = 1.e-4,
             atol = 1.e-6,
         )
+
+        path_to_qtorch = '/common/users/yh804/research/qtorch/bin/qtorch'
+        with open('kc_hello_qubit.inp','w') as inp_file:
+            inp_file.write('''# Line graph decomposition method for contraction
+>string qasm kc_hello_qubit.quil
+# >string contractmethod simple-stoch
+>string contractmethod linegraph-qbb
+>int quickbbseconds 65536
+# >string measurement kc_hello_qubit.meas
+# >string outputpath kc_hello_qubit.out
+>bool qbbonly true
+# >bool readqbbresonly true
+# >int threads 8
+''')
+        stdout = os.system(path_to_qtorch + ' kc_hello_qubit.inp')
+
+        probs=np.zeros(1<<3)
+        for bitstring in range(1<<3):
+            with open('kc_hello_qubit.inp','w') as inp_file:
+                inp_file.write('''# Line graph decomposition method for contraction
+>string qasm kc_hello_qubit.quil
+# >string contractmethod simple-stoch
+>string contractmethod linegraph-qbb
+# >int quickbbseconds 65536
+>string measurement kc_hello_qubit.meas
+>string outputpath kc_hello_qubit.out
+# >bool qbbonly true
+>bool readqbbresonly true
+>int threads 8
+''')
+            with open('kc_hello_qubit.meas','w') as meas_file:
+                meas_file.write("{:03b}".format(bitstring))
+            stdout = os.system(path_to_qtorch + ' kc_hello_qubit.inp')
+            with open('kc_hello_qubit.out','r') as out_file:
+                for line in out_file.readlines():
+                    words = re.split('\(|,',line)
+                    if words[0]=='Result of Contraction: ':
+                        probs[bitstring] = float(words[1])
+
+        assert cirq.linalg.allclose_up_to_global_phase(
+            np.diag(np.outer(qs_result.state_vector(),np.conj(qs_result.state_vector()))),
+            probs,
+            rtol = 1.e-4,
+            atol = 1.e-6,
+        )
+
         circuit_unitary = []
-        for x in range(16):
+        for x in range(8):
             result = kc_simulator.simulate(random_circuit,
                                         initial_state=x)
             circuit_unitary.append(result.final_state)

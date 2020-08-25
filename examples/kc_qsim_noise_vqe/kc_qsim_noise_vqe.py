@@ -17,15 +17,22 @@ rcParams.update({'figure.autolayout': True})
 dm_smp_time_dict = {}
 kc_smp_time_dict = {}
 
+cirq_max = 9
+
 def main():
 
-    for max_length in range(3,6):
-        for steps in range(3,4):
+    for max_length in range(4,5):
+        for steps in range(1,3):
 
-            grid_points = []
+            grid_points_cirq = []
+            grid_points_all = []
+
             for length in range(2,max_length):
 
-                grid_points.append(length*length)
+                if length*length<=cirq_max:
+                    grid_points_cirq.append(length*length)
+                grid_points_all.append(length*length)
+
                 dm_smp_time_dict[length*length] = []
                 kc_smp_time_dict[length*length] = []
 
@@ -38,15 +45,16 @@ def main():
             dm_smp_time_stdev = []
             kc_smp_time_stdev = []
 
-            for grid_point in grid_points:
+            for grid_point in grid_points_all:
 
-                dm_smp_time_mean.append(mean(dm_smp_time_dict[grid_point]))
-                dm_smp_time_stdev.append(stdev(dm_smp_time_dict[grid_point]))
+                if grid_point<=cirq_max:
+                    dm_smp_time_mean.append(mean(dm_smp_time_dict[grid_point]))
+                    dm_smp_time_stdev.append(stdev(dm_smp_time_dict[grid_point]))
 
                 kc_smp_time_mean.append(mean(kc_smp_time_dict[grid_point]))
                 kc_smp_time_stdev.append(stdev(kc_smp_time_dict[grid_point]))
 
-            fig = plt.figure(figsize=(5,3))
+            fig = plt.figure(figsize=(6,3))
             # plt.subplots_adjust(left=.2)
             ax = fig.add_subplot(1, 1, 1)
 
@@ -55,8 +63,8 @@ def main():
             ax.set_ylabel('Time (s)')
             ax.set_yscale('log')
             ax.grid(linestyle="--", linewidth=0.25, color='.125', zorder=-10)
-            ax.errorbar(grid_points, dm_smp_time_mean, yerr=dm_smp_time_stdev, color='magenta', marker='x', label='density matrix sampling')
-            ax.errorbar(grid_points, kc_smp_time_mean, yerr=kc_smp_time_stdev, color='red', marker='o', label='knowledge compilation sampling')
+            ax.errorbar(grid_points_cirq, dm_smp_time_mean, yerr=dm_smp_time_stdev, color='gray', marker='2', label='density matrix sampling')
+            ax.errorbar(grid_points_all, kc_smp_time_mean, yerr=kc_smp_time_stdev, color='purple', marker='o', label='knowledge compilation sampling')
             ax.legend(loc='upper left', frameon=False)
             ax.spines['right'].set_visible(True)
             ax.spines['top'].set_visible(True)
@@ -105,15 +113,15 @@ def trial(length=2, steps=1, repetitions=1000, maxiter=2):
     kc_smp = cirq.KnowledgeCompilationSimulator(meas_circuit, initial_state=0)
 
 
-    iter = 0
+    # eval_iter = 0
     def f(x):
         param_resolver = cirq.ParamResolver({ 'alpha':x[0], 'beta':x[1], 'gamma':x[2] })
 
         # VALIDATE DENSITY MATRIX SIMULATION
 
-        dm_sim_start = time.time()
-        dm_sim_result = dm_sim.simulate(cirq_circuit, param_resolver=param_resolver)
-        dm_sim_time = time.time() - dm_sim_start
+        # dm_sim_start = time.time()
+        # dm_sim_result = dm_sim.simulate(cirq_circuit, param_resolver=param_resolver)
+        # dm_sim_time = time.time() - dm_sim_start
 
         # kc_sim_start = time.time()
         # kc_sim_result = kc_sim.simulate(cirq_circuit, param_resolver=param_resolver)
@@ -133,23 +141,24 @@ def trial(length=2, steps=1, repetitions=1000, maxiter=2):
         # VALIDATE SAMPLING HISTOGRAMS
 
         # Sample bitstrings from circuit
-        dm_smp_start = time.time()
-        dm_smp_result = dm_sim.run(meas_circuit, param_resolver=param_resolver, repetitions=repetitions)
-        dm_smp_time = time.time() - dm_smp_start
-        dm_smp_time_dict[length*length].append(dm_smp_time)
+        if length*length<=cirq_max:
+            dm_smp_start = time.time()
+            dm_smp_result = dm_sim.run(meas_circuit, param_resolver=param_resolver, repetitions=repetitions)
+            dm_smp_time = time.time() - dm_smp_start
+            dm_smp_time_dict[length*length].append(dm_smp_time)
 
-        # Process histogram
-        dm_bitstrings = dm_smp_result.measurements['x']
-        dm_histogram = defaultdict(int)
-        for bitstring in dm_bitstrings:
-            integer = 0
-            for pos, bit in enumerate(reversed(bitstring)):
-                integer += bit<<pos
-            dm_histogram[integer] += 1
+            # Process histogram
+            dm_bitstrings = dm_smp_result.measurements['x']
+            dm_histogram = defaultdict(int)
+            for bitstring in dm_bitstrings:
+                integer = 0
+                for pos, bit in enumerate(reversed(bitstring)):
+                    integer += bit<<pos
+                dm_histogram[integer] += 1
 
-        # Process bitstrings
-        dm_value = obj_func(dm_smp_result, h, jr, jc)
-        print('Objective value is {}.'.format(dm_value))
+            # Process bitstrings
+            dm_value = obj_func(dm_smp_result, h, jr, jc)
+            print('Objective value is {}.'.format(dm_value))
 
         # Sample bitstrings from circuit
         kc_smp_start = time.time()
@@ -170,27 +179,28 @@ def trial(length=2, steps=1, repetitions=1000, maxiter=2):
         kc_value = obj_func(kc_smp_result, h, jr, jc)
         print('Objective value is {}.'.format(kc_value))
 
-        nonlocal iter
+        # nonlocal eval_iter
         # PRINT HISTOGRAMS
-        print ('iter,index,bitstring,bitstring_bin,dm_probability,dm_samples,kc_samples')
-        probabilities = np.zeros(1<<(length*length))
-        for bitstring, probability in enumerate(cirq.sim.density_matrix_utils._probs(
-            dm_sim_result.final_density_matrix,
-            [index for index in range(length*length)],
-            cirq.protocols.qid_shape(qubits)
-        )):
-            probabilities[bitstring]=probability
-        sorted_bitstrings = np.argsort(probabilities)
-        for index, bitstring in enumerate(sorted_bitstrings):
-            print (str(iter)+','+str(index)+','+str(bitstring)+','+format(bitstring,'b').zfill(length*length)+','+str(probabilities[bitstring])+','+"{:.6e}".format(dm_histogram[bitstring]/repetitions)+','+"{:.6e}".format(kc_histogram[bitstring]/repetitions))
+        # print ('eval_iter,index,bitstring,bitstring_bin,dm_probability,dm_samples,kc_samples')
+        # probabilities = np.zeros(1<<(length*length))
+        # for bitstring, probability in enumerate(cirq.sim.density_matrix_utils._probs(
+        #     dm_sim_result.final_density_matrix,
+        #     [index for index in range(length*length)],
+        #     cirq.protocols.qid_shape(qubits)
+        # )):
+        #     probabilities[bitstring]=probability
+        # sorted_bitstrings = np.argsort(probabilities)
+        # for index, bitstring in enumerate(sorted_bitstrings):
+        #     print (str(eval_iter)+','+str(index)+','+str(bitstring)+','+format(bitstring,'b').zfill(length*length)+','+str(probabilities[bitstring])+','+"{:.6e}".format(dm_histogram[bitstring]/repetitions)+','+"{:.6e}".format(kc_histogram[bitstring]/repetitions))
 
-        print ('dm_value='+str(dm_value)+' kc_value='+str(kc_value))
-        # print ( 'dm_sim_time='+str(dm_sim_time)+' kc_sim_time='+str(kc_sim_time) )
-        print ( 'dm_sim_time='+str(dm_sim_time) )
-        print ( 'dm_smp_time='+str(dm_smp_time)+' kc_smp_time='+str(kc_smp_time) )
+        if length*length<=cirq_max:
+            print ('dm_value='+str(dm_value)+' kc_value='+str(kc_value))
+            # print ( 'dm_sim_time='+str(dm_sim_time)+' kc_sim_time='+str(kc_sim_time) )
+            # print ( 'dm_sim_time='+str(dm_sim_time) )
+            print ( 'dm_smp_time='+str(dm_smp_time)+' kc_smp_time='+str(kc_smp_time) )
         print ('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
-        iter += 1
-        return dm_value
+        # eval_iter += 1
+        return kc_value
 
     # Pick an initial guess
     x0 = np.random.uniform(0.0, 1.0, size=3)

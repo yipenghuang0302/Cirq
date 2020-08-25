@@ -56,6 +56,8 @@ import networkx
 import numpy as np
 import sympy
 import scipy.optimize
+from random import randrange
+import re, os, subprocess
 
 import cirq
 import qsimcirq
@@ -67,74 +69,81 @@ from matplotlib import rcParams
 rcParams.update({'figure.autolayout': True})
 
 qs_smp_01_time_dict = {}
-# qs_smp_02_time_dict = {}
-qs_smp_04_time_dict = {}
-# qs_smp_08_time_dict = {}
+# qs_smp_04_time_dict = {}
 qs_smp_16_time_dict = {}
-# qh_smp_16_time_dict = {}
+qt_smp_01_time_dict = {}
+# qt_smp_04_time_dict = {}
+qt_smp_16_time_dict = {}
 kc_smp_time_dict = {}
+
+qsim_max = 30
 
 def main(p=1):
 
-    for max_length in range(28,32,2):
-        for p in range(3,4):
+    for p in range(1,3):
+        for max_length in range(34,36,2):
 
-            vertices = []
+            vertices_qsim = []
+            vertices_all = []
+
             for n in range(4,max_length,2):
 
-                vertices.append(n)
+                if n<=qsim_max:
+                    vertices_qsim.append(n)
+                vertices_all.append(n)
+
                 qs_smp_01_time_dict[n] = []
-                # qs_smp_02_time_dict[n] = []
-                qs_smp_04_time_dict[n] = []
-                # qs_smp_08_time_dict[n] = []
+                # qs_smp_04_time_dict[n] = []
                 qs_smp_16_time_dict[n] = []
-                # qh_smp_16_time_dict[n] = []
+                qt_smp_01_time_dict[n] = []
+                # qt_smp_04_time_dict[n] = []
+                qt_smp_16_time_dict[n] = []
                 kc_smp_time_dict[n] = []
 
                 for _ in range(2):
                     trial(n=n,p=p,repetitions=1000)
 
             qs_smp_01_time_mean = []
-            # qs_smp_02_time_mean = []
-            qs_smp_04_time_mean = []
-            # qs_smp_08_time_mean = []
+            # qs_smp_04_time_mean = []
             qs_smp_16_time_mean = []
-            # qh_smp_16_time_mean = []
+            qt_smp_01_time_mean = []
+            # qt_smp_04_time_mean = []
+            qt_smp_16_time_mean = []
             kc_smp_time_mean = []
 
             qs_smp_01_time_stdev = []
-            # qs_smp_02_time_stdev = []
-            qs_smp_04_time_stdev = []
-            # qs_smp_08_time_stdev = []
+            # qs_smp_04_time_stdev = []
             qs_smp_16_time_stdev = []
-            # qh_smp_16_time_stdev = []
+            qt_smp_01_time_stdev = []
+            # qt_smp_04_time_stdev = []
+            qt_smp_16_time_stdev = []
             kc_smp_time_stdev = []
 
-            for n in vertices:
+            for n in vertices_all:
 
-                qs_smp_01_time_mean.append(mean(qs_smp_01_time_dict[n]))
-                qs_smp_01_time_stdev.append(stdev(qs_smp_01_time_dict[n]))
+                if n<=qsim_max:
+                    qs_smp_01_time_mean.append(mean(qs_smp_01_time_dict[n]))
+                    qs_smp_01_time_stdev.append(stdev(qs_smp_01_time_dict[n]))
 
-                # qs_smp_02_time_mean.append(mean(qs_smp_02_time_dict[n]))
-                # qs_smp_02_time_stdev.append(stdev(qs_smp_02_time_dict[n]))
+                    # qs_smp_04_time_mean.append(mean(qs_smp_04_time_dict[n]))
+                    # qs_smp_04_time_stdev.append(stdev(qs_smp_04_time_dict[n]))
 
-                qs_smp_04_time_mean.append(mean(qs_smp_04_time_dict[n]))
-                qs_smp_04_time_stdev.append(stdev(qs_smp_04_time_dict[n]))
+                    qs_smp_16_time_mean.append(mean(qs_smp_16_time_dict[n]))
+                    qs_smp_16_time_stdev.append(stdev(qs_smp_16_time_dict[n]))
 
-                # qs_smp_08_time_mean.append(mean(qs_smp_08_time_dict[n]))
-                # qs_smp_08_time_stdev.append(stdev(qs_smp_08_time_dict[n]))
+                qt_smp_01_time_mean.append(mean(qt_smp_01_time_dict[n]))
+                qt_smp_01_time_stdev.append(stdev(qt_smp_01_time_dict[n]))
 
-                qs_smp_16_time_mean.append(mean(qs_smp_16_time_dict[n]))
-                qs_smp_16_time_stdev.append(stdev(qs_smp_16_time_dict[n]))
+                # qt_smp_04_time_mean.append(mean(qt_smp_04_time_dict[n]))
+                # qt_smp_04_time_stdev.append(stdev(qt_smp_04_time_dict[n]))
 
-                # qh_smp_16_time_mean.append(mean(qh_smp_16_time_dict[n]))
-                # qh_smp_16_time_stdev.append(stdev(qh_smp_16_time_dict[n]))
+                qt_smp_16_time_mean.append(mean(qt_smp_16_time_dict[n]))
+                qt_smp_16_time_stdev.append(stdev(qt_smp_16_time_dict[n]))
 
                 kc_smp_time_mean.append(mean(kc_smp_time_dict[n]))
                 kc_smp_time_stdev.append(stdev(kc_smp_time_dict[n]))
 
-
-            fig = plt.figure(figsize=(5,3))
+            fig = plt.figure(figsize=(6,3))
             # plt.subplots_adjust(left=.2)
             ax = fig.add_subplot(1, 1, 1)
 
@@ -143,13 +152,13 @@ def main(p=1):
             ax.set_ylabel('Time (s)')
             ax.set_yscale('log')
             ax.grid(linestyle="--", linewidth=0.25, color='.125', zorder=-10)
-            ax.errorbar(vertices, qs_smp_01_time_mean, yerr=qs_smp_01_time_stdev, color='blue' , marker='x', label='qsim sampling with 1 thread')
-            # ax.errorbar(vertices, qs_smp_02_time_mean, yerr=qs_smp_02_time_stdev, label='qsim sampling with 2 threads')
-            ax.errorbar(vertices, qs_smp_04_time_mean, yerr=qs_smp_04_time_stdev, color='cyan' , marker='x', label='qsim sampling with 4 threads')
-            # ax.errorbar(vertices, qs_smp_08_time_mean, yerr=qs_smp_08_time_stdev, label='qsim sampling with 8 threads')
-            ax.errorbar(vertices, qs_smp_16_time_mean, yerr=qs_smp_16_time_stdev, color='green', marker='x', label='qsim sampling with 16 threads')
-            # ax.errorbar(vertices, qh_smp_16_time_mean, yerr=qh_smp_16_time_stdev, label='qsimh sampling with 16 threads')
-            ax.errorbar(vertices, kc_smp_time_mean, yerr=kc_smp_time_stdev, color='red', marker='o', label='knowledge compilation sampling')
+            ax.errorbar(vertices_qsim, qs_smp_01_time_mean, yerr=qs_smp_01_time_stdev, color='green' , marker='+', label='qsim sampling with 1 thread')
+            # ax.errorbar(vertices_qsim, qs_smp_04_time_mean, yerr=qs_smp_04_time_stdev, color='cyan' , marker='+', label='qsim sampling with 4 threads')
+            ax.errorbar(vertices_qsim, qs_smp_16_time_mean, yerr=qs_smp_16_time_stdev, color='blue', marker='+', label='qsim sampling with 16 threads')
+            ax.errorbar(vertices_all, qt_smp_01_time_mean, yerr=qt_smp_01_time_stdev, color='orange' , marker='x', label='qtorch sampling with 1 thread')
+            # ax.errorbar(vertices_all, qt_smp_04_time_mean, yerr=qt_smp_04_time_stdev, color='orange' , marker='x', label='qtorch sampling with 4 threads')
+            ax.errorbar(vertices_all, qt_smp_16_time_mean, yerr=qt_smp_16_time_stdev, color='red', marker='x', label='qtorch sampling with 16 threads')
+            ax.errorbar(vertices_all, kc_smp_time_mean, yerr=kc_smp_time_stdev, color='purple', marker='o', label='knowledge compilation sampling')
             ax.legend(loc='upper left', frameon=False)
             ax.spines['right'].set_visible(True)
             ax.spines['top'].set_visible(True)
@@ -176,18 +185,11 @@ def trial(n=6, p=2, repetitions=1000, maxiter=2):
     # sv_sim = cirq.Simulator()
     # dm_simulator = cirq.DensityMatrixSimulator()
     qs_sim_01 = qsimcirq.QSimSimulator( qsim_options={'t': 1, 'v': 0} )
-    # qs_sim_02 = qsimcirq.QSimSimulator( qsim_options={'t': 2, 'v': 0} )
-    qs_sim_04 = qsimcirq.QSimSimulator( qsim_options={'t': 4, 'v': 0} )
-    # qs_sim_08 = qsimcirq.QSimSimulator( qsim_options={'t': 8, 'v': 0} )
+    # qs_sim_04 = qsimcirq.QSimSimulator( qsim_options={'t': 4, 'v': 0} )
     qs_sim_16 = qsimcirq.QSimSimulator( qsim_options={'t':16, 'v': 0} )
-    # qh_sim_16 = qsimcirq.QSimhSimulator( qsimh_options={
-    #     't': 64,
-    #     'v':  2,
-    #     'k': [k for k in range(int(n/2))],
-    #     'w':  0,
-    #     'p': int(2*n/3),
-    #     'r': int(2*n/3)
-    # } )
+    path_to_qtorch = '/common/users/yh804/research/qtorch/bin/qtorch'
+    regex = r"\{(.*?)\}"
+    new_circuit_topo = True
     # kc_sim = cirq.KnowledgeCompilationSimulator(cirq_circuit, initial_state=0)
     kc_smp = cirq.KnowledgeCompilationSimulator(meas_circuit, initial_state=0)
 
@@ -200,7 +202,7 @@ def trial(n=6, p=2, repetitions=1000, maxiter=2):
     kc_largest_cut_value_found = 0
 
     # Define objective function (we'll use the negative expected cut value)
-    # iter = 0
+    # eval_iter = 0
     def f(x):
         # Create circuit
         betas = x[:p]
@@ -211,6 +213,7 @@ def trial(n=6, p=2, repetitions=1000, maxiter=2):
 
         # VALIDATE STATE VECTOR SIMULATION
         solved_circuit = cirq.resolve_parameters(meas_circuit, param_resolver)
+        solved_circuit._to_quil_output().save_to_file('kc_qtorch_qaoa.quil')
         cirq.ConvertToCzAndSingleGates().optimize_circuit(solved_circuit) # cannot work with params
         cirq.ExpandComposite().optimize_circuit(solved_circuit)
         qsim_circuit = qsimcirq.QSimCircuit(solved_circuit)
@@ -219,9 +222,9 @@ def trial(n=6, p=2, repetitions=1000, maxiter=2):
         # sv_sim_result = sv_sim.simulate(cirq_circuit, param_resolver=param_resolver)
         # sv_sim_time = time.time() - sv_sim_start
 
-        qs_sim_start = time.time()
-        qs_sim_result = qs_sim_16.simulate(qsim_circuit)
-        qs_sim_time = time.time() - qs_sim_start
+        # qs_sim_start = time.time()
+        # qs_sim_result = qs_sim_16.simulate(qsim_circuit)
+        # qs_sim_time = time.time() - qs_sim_start
 
         # kc_sim_start = time.time()
         # kc_sim_result = kc_sim.simulate(cirq_circuit, param_resolver=param_resolver)
@@ -274,60 +277,129 @@ def trial(n=6, p=2, repetitions=1000, maxiter=2):
         # sv_mean = np.mean(sv_values)
 
         # Sample bitstrings from circuit
-        qs_smp_01_start = time.time()
-        qs_smp_01_result = qs_sim_01.run(qsim_circuit, repetitions=repetitions)
-        qs_smp_01_time = time.time() - qs_smp_01_start
-        qs_smp_01_time_dict[n].append(qs_smp_01_time)
+        if n<=qsim_max:
+            qs_smp_01_start = time.time()
+            qs_smp_01_result = qs_sim_01.run(qsim_circuit, repetitions=repetitions)
+            qs_smp_01_time = time.time() - qs_smp_01_start
+            qs_smp_01_time_dict[n].append(qs_smp_01_time)
 
-        # qs_smp_02_start = time.time()
-        # qs_smp_02_result = qs_sim_02.run(qsim_circuit, repetitions=repetitions)
-        # qs_smp_02_time = time.time() - qs_smp_02_start
-        # qs_smp_02_time_dict[n].append(qs_smp_02_time)
+            # qs_smp_04_start = time.time()
+            # qs_smp_04_result = qs_sim_04.run(qsim_circuit, repetitions=repetitions)
+            # qs_smp_04_time = time.time() - qs_smp_04_start
+            # qs_smp_04_time_dict[n].append(qs_smp_04_time)
 
-        qs_smp_04_start = time.time()
-        qs_smp_04_result = qs_sim_04.run(qsim_circuit, repetitions=repetitions)
-        qs_smp_04_time = time.time() - qs_smp_04_start
-        qs_smp_04_time_dict[n].append(qs_smp_04_time)
+            qs_smp_16_start = time.time()
+            qs_smp_16_result = qs_sim_16.run(qsim_circuit, repetitions=repetitions)
+            qs_smp_16_time = time.time() - qs_smp_16_start
+            qs_smp_16_time_dict[n].append(qs_smp_16_time)
 
-        # qs_smp_08_start = time.time()
-        # qs_smp_08_result = qs_sim_08.run(qsim_circuit, repetitions=repetitions)
-        # qs_smp_08_time = time.time() - qs_smp_08_start
-        # qs_smp_08_time_dict[n].append(qs_smp_08_time)
+            qs_bitstrings = qs_smp_16_result.measurements['m']
 
-        qs_smp_16_start = time.time()
-        qs_smp_16_result = qs_sim_16.run(qsim_circuit, repetitions=repetitions)
-        qs_smp_16_time = time.time() - qs_smp_16_start
-        qs_smp_16_time_dict[n].append(qs_smp_16_time)
+            # Process histogram
+            qs_histogram = defaultdict(int)
+            # qs_bitstring_strs = []
+            for bitstring in qs_bitstrings:
+                integer = 0
+                # string = ''
+                for pos, bit in enumerate(bitstring):
+                    integer += bit<<pos
+                    # string += str(bit)
+                qs_histogram[integer] += 1
+                # qs_bitstring_strs.append(string)
 
-        qs_bitstrings = qs_smp_16_result.measurements['m']
+            # Process bitstrings
+            nonlocal qs_largest_cut_found
+            nonlocal qs_largest_cut_value_found
+            qs_values = cut_values(np.array([np.flip(qs_bitstring) for qs_bitstring in qs_bitstrings]), graph)
+            qs_max_value_index = np.argmax(qs_values)
+            qs_max_value = qs_values[qs_max_value_index]
+            if qs_max_value > qs_largest_cut_value_found:
+                qs_largest_cut_value_found = qs_max_value
+                qs_largest_cut_found = qs_bitstrings[qs_max_value_index]
+            qs_mean = np.mean(qs_values)
 
-        # Process histogram
-        qs_histogram = defaultdict(int)
-        # qs_bitstring_strs = []
-        for bitstring in qs_bitstrings:
-            integer = 0
-            # string = ''
-            for pos, bit in enumerate(bitstring):
-                integer += bit<<pos
-                # string += str(bit)
-            qs_histogram[integer] += 1
-            # qs_bitstring_strs.append(string)
+#         nonlocal new_circuit_topo
+#         if new_circuit_topo:
+#             with open('kc_qtorch_qaoa.inp','w') as inp_file:
+#                 inp_file.write('''# Line graph decomposition method for contraction
+# >string qasm kc_qtorch_qaoa.quil
+# # >string contractmethod simple-stoch
+# >string contractmethod linegraph-qbb
+# >int quickbbseconds 60
+# # >string measurement kc_qtorch_qaoa.meas
+# # >string outputpath kc_qtorch_qaoa.out
+# >bool qbbonly true
+# # >bool readqbbresonly true
+# ''')
+#             stdout = os.system(path_to_qtorch + ' kc_qtorch_qaoa.inp')
+#             new_circuit_topo = False
 
-        # Process bitstrings
-        nonlocal qs_largest_cut_found
-        nonlocal qs_largest_cut_value_found
-        qs_values = cut_values(np.array([np.flip(qs_bitstring) for qs_bitstring in qs_bitstrings]), graph)
-        qs_max_value_index = np.argmax(qs_values)
-        qs_max_value = qs_values[qs_max_value_index]
-        if qs_max_value > qs_largest_cut_value_found:
-            qs_largest_cut_value_found = qs_max_value
-            qs_largest_cut_found = qs_bitstrings[qs_max_value_index]
-        qs_mean = np.mean(qs_values)
+        with open('kc_qtorch_qaoa.inp','w') as inp_file:
+            inp_file.write('''# Line graph decomposition method for contraction
+>string qasm kc_qtorch_qaoa.quil
+>string contractmethod simple-stoch
+# >string contractmethod linegraph-qbb
+# >int quickbbseconds 60
+>string measurement kc_qtorch_qaoa.meas
+>string outputpath kc_qtorch_qaoa.out
+# >bool qbbonly true
+# >bool readqbbresonly true
+>int threads 1
+''')
+        bitstring = randrange(1<<n)
+        with open('kc_qtorch_qaoa.meas','w') as meas_file:
+            meas_file.write("{:b}".format(bitstring).zfill(n))
+        try:
+            stdout = subprocess.check_output([path_to_qtorch, 'kc_qtorch_qaoa.inp'], stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            print (stdout)
+            print (e.output)
+        matches = re.findall(regex, stdout.decode("utf-8"), re.MULTILINE | re.DOTALL)
+        begin_time = float(matches[1])
+        end_time = float(matches[2])
+        qt_smp_01_time_dict[n].append(repetitions*(end_time-begin_time))
 
-        # qh_smp_16_start = time.time()
-        # qh_smp_16_result = qh_sim_16.compute_amplitudes(program=qsim_circuit, bitstrings=qs_bitstring_strs)
-        # qh_smp_16_time = time.time() - qh_smp_16_start
-        # qh_smp_16_time_dict[n].append(qh_smp_16_time)
+#         with open('kc_qtorch_qaoa.inp','w') as inp_file:
+#             inp_file.write('''# Line graph decomposition method for contraction
+# >string qasm kc_qtorch_qaoa.quil
+# >string contractmethod simple-stoch
+# # >string contractmethod linegraph-qbb
+# # >int quickbbseconds 60
+# >string measurement kc_qtorch_qaoa.meas
+# >string outputpath kc_qtorch_qaoa.out
+# # >bool qbbonly true
+# # >bool readqbbresonly true
+# >int threads 4
+# ''')
+#         bitstring = randrange(1<<n)
+#         with open('kc_qtorch_qaoa.meas','w') as meas_file:
+#             meas_file.write("{:b}".format(bitstring).zfill(n))
+#         stdout = subprocess.check_output([path_to_qtorch, 'kc_qtorch_qaoa.inp'], stderr=subprocess.STDOUT)
+#         matches = re.findall(regex, stdout.decode("utf-8"), re.MULTILINE | re.DOTALL)
+#         begin_time = float(matches[1])
+#         end_time = float(matches[2])
+#         qt_smp_04_time_dict[n].append(repetitions*(end_time-begin_time))
+
+        with open('kc_qtorch_qaoa.inp','w') as inp_file:
+            inp_file.write('''# Line graph decomposition method for contraction
+>string qasm kc_qtorch_qaoa.quil
+>string contractmethod simple-stoch
+# >string contractmethod linegraph-qbb
+# >int quickbbseconds 60
+>string measurement kc_qtorch_qaoa.meas
+>string outputpath kc_qtorch_qaoa.out
+# >bool qbbonly true
+# >bool readqbbresonly true
+>int threads 16
+''')
+        bitstring = randrange(1<<n)
+        with open('kc_qtorch_qaoa.meas','w') as meas_file:
+            meas_file.write("{:b}".format(bitstring).zfill(n))
+        stdout = subprocess.check_output([path_to_qtorch, 'kc_qtorch_qaoa.inp'], stderr=subprocess.STDOUT)
+        matches = re.findall(regex, stdout.decode("utf-8"), re.MULTILINE | re.DOTALL)
+        begin_time = float(matches[1])
+        end_time = float(matches[2])
+        qt_smp_16_time_dict[n].append(repetitions*(end_time-begin_time))
 
         # Sample bitstrings from circuit
         kc_smp_start = time.time()
@@ -355,23 +427,24 @@ def trial(n=6, p=2, repetitions=1000, maxiter=2):
             kc_largest_cut_found = kc_bitstrings[kc_max_value_index]
         kc_mean = np.mean(kc_values)
 
-        # nonlocal iter
+        # nonlocal eval_iter
         # PRINT HISTOGRAMS
-        # print ('iter,index,bitstring,bitstring_bin,sv_probability,sv_samples,qs_samples,kc_samples')
+        # print ('eval_iter,index,bitstring,bitstring_bin,sv_probability,sv_samples,qs_samples,kc_samples')
         # probabilities = np.zeros(1<<n)
         # for bitstring, amplitude in enumerate(sv_sim_result.state_vector()):
         #     probability = abs(amplitude) * abs(amplitude)
         #     probabilities[bitstring]=probability
         # sorted_bitstrings = np.argsort(probabilities)
         # for index, bitstring in enumerate(sorted_bitstrings):
-        #     print (str(iter)+','+str(index)+','+str(bitstring)+','+format(bitstring,'b').zfill(n)+','+str(probabilities[bitstring])+','+"{:.6e}".format(sv_histogram[bitstring]/repetitions)+','+"{:.6e}".format(qs_histogram[bitstring]/repetitions)+','+"{:.6e}".format(kc_histogram[bitstring]/repetitions))
+        #     print (str(eval_iter)+','+str(index)+','+str(bitstring)+','+format(bitstring,'b').zfill(n)+','+str(probabilities[bitstring])+','+"{:.6e}".format(sv_histogram[bitstring]/repetitions)+','+"{:.6e}".format(qs_histogram[bitstring]/repetitions)+','+"{:.6e}".format(kc_histogram[bitstring]/repetitions))
 
-        print ('qs_mean='+str(qs_mean)+' kc_mean='+str(kc_mean))
-        # print ( 'sv_sim_time='+str(sv_sim_time)+' qs_sim_time='+str(qs_sim_time)+' kc_sim_time='+str(kc_sim_time) )
-        print ( 'qs_smp_01_time='+str(qs_smp_01_time)+' qs_smp_04_time='+str(qs_smp_04_time)+' qs_smp_16_time='+str(qs_smp_16_time)+' kc_smp_time='+str(kc_smp_time) )
+        if n<=qsim_max:
+            print ('qs_mean='+str(qs_mean)+' kc_mean='+str(kc_mean))
+            # print ( 'sv_sim_time='+str(sv_sim_time)+' qs_sim_time='+str(qs_sim_time)+' kc_sim_time='+str(kc_sim_time) )
+            print ( 'qs_smp_01_time='+str(qs_smp_01_time)+' qs_smp_16_time='+str(qs_smp_16_time)+' kc_smp_time='+str(kc_smp_time) )
         print ('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
-        # iter += 1
-        return -qs_mean
+        # eval_iter += 1
+        return -kc_mean
 
     # Pick an initial guess
     x0 = np.random.uniform(-np.pi, np.pi, size=2 * p)
