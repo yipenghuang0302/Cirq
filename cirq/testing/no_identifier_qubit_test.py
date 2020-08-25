@@ -1,4 +1,4 @@
-# Copyright 2018 The Cirq Developers
+# Copyright 2020 The Cirq Developers
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,20 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from cirq.google.line.placement.anneal import (
-    AnnealSequenceSearchStrategy,)
+import cirq
 
-from cirq.google.line.placement.greedy import (
-    GreedySequenceSearchStrategy,)
 
-from cirq.google.line.placement.place_strategy import (
-    LinePlacementStrategy,)
+def test_named_qubit_repr():
+    q = cirq.testing.NoIdentifierQubit()
+    assert repr(q) == "cirq.testing.NoIdentifierQubit()"
 
-from cirq.google.line.placement.sequence import (
-    GridQubitLineTuple,)
 
-from cirq.google.line.placement.line import (
-    line_on_device,)
+def test_comparsion_key():
+    q = cirq.testing.NoIdentifierQubit()
+    p = cirq.testing.NoIdentifierQubit()
+    assert p == q
 
-from cirq.google.line.placement.optimization import (
-    anneal_minimize,)
+
+def test_to_json():
+    assert cirq.testing.NoIdentifierQubit()._json_dict_() == {
+        'cirq_type': 'NoIdentifierQubit',
+    }
