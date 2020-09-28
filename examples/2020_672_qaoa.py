@@ -42,8 +42,9 @@ def main(repetitions=1000, maxiter=2):
     graph = networkx.Graph()
     graph.add_nodes_from([0,1,2])
     graph.add_edges_from([(0,1), (1,2)])
-    # networkx.draw(graph)
-    # plt.show()
+    networkx.draw(graph)
+    plt.show()
+    quit()
 
     # Each node in n nodes of the MAX-CUT graph corresponds to one of n qubits in the quantum circuit.
     # The state vector across the qubits encodes a node partitioning
@@ -56,6 +57,7 @@ def main(repetitions=1000, maxiter=2):
     simulator = cirq.Simulator()
     print ("Put the initial state vector in a superposition of all possible node partitionings:")
     print (simulator.simulate(hadamard_circuit, initial_state=0))
+    quit()
 
     # Print an example circuit
     # Provide classical parameters such that the classical computer can control quantum partitioning
@@ -64,6 +66,7 @@ def main(repetitions=1000, maxiter=2):
     circuit = qaoa_max_cut_circuit(qubits, betas, gammas, graph)
     print('Example QAOA circuit:')
     print(circuit.to_text_diagram(transpose=True))
+    quit()
 
     # Create variables to store the largest cut and cut value found
     largest_cut_found = None
@@ -84,12 +87,14 @@ def main(repetitions=1000, maxiter=2):
         # such that the final state vector is a superposition of good partitionings
         circuit = qaoa_max_cut_circuit(qubits, betas, gammas, graph)
         circuit_no_measurement = qaoa_max_cut_circuit_no_measurement(qubits, betas, gammas, graph)
-        # print (simulator.simulate(circuit_no_measurement))
-        final_state_vector = simulator.simulate(circuit_no_measurement).final_state_vector
+        print (simulator.simulate(circuit_no_measurement))
+        quit()
+
+        final_state = simulator.simulate(circuit_no_measurement).final_state
         nonlocal optimization_iter
         nonlocal histograms
 
-        histograms[optimization_iter] = np.square(np.absolute(final_state_vector))
+        histograms[optimization_iter] = np.square(np.absolute(final_state))
 
         # Sample bitstrings from circuit
         result = simulator.run(circuit, repetitions=repetitions)
