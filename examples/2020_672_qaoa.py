@@ -18,7 +18,6 @@ M('m')────M─────────M
 Optimizing objective function ...
 The largest cut value found was 2.0.
 The largest possible cut has size 2.0.
-The approximation ratio achieved is 1.0.
 """
 
 import itertools
@@ -143,8 +142,6 @@ def main(repetitions=1000, maxiter=64):
     # Print the results
     print('The largest cut value found was {}.'.format(largest_cut_value_found))
     print('The largest possible cut has size {}.'.format(max_cut_value))
-    print('The approximation ratio achieved is {}.'.format(
-        largest_cut_value_found / max_cut_value))
 
     # Visualize the data
     fig, ((bax,gax),(dax,max)) = plt.subplots(2,2)
