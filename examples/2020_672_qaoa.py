@@ -28,15 +28,18 @@ import networkx
 import scipy.optimize
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+from matplotlib.lines import Line2D
 
 import cirq
 
-
-def main(repetitions=1000, maxiter=2):
+def main(repetitions=1000, maxiter=64):
 
     # Set problem parameters
     n=3
-    p=2
+    p=3
+
+    # Generate a random 3-regular graph on n nodes
+    # graph = networkx.random_regular_graph(3, n)
 
     # Recreate the minimal 3-node example from class
     graph = networkx.Graph()
@@ -75,26 +78,33 @@ def main(repetitions=1000, maxiter=2):
     # Initialize simulator
     simulator = cirq.Simulator()
 
-    # For plotting histograms as a function of the optimization iteration
-    histograms = {}
+    # For visualizing the optimization iterations
+    betas_sched = []
+    gammas_sched = []
+    meas_prob_dist_sched = []
+    cut_mean_sched = []
+
     # Define objective function (we'll use the negative expected cut value)
-    optimization_iter = 0
     def f(x):
         # Create circuit
         betas = x[:p]
         gammas = x[p:]
+        betas_sched.append(betas)
+        gammas_sched.append(gammas)
+
         # Perform a series of operations parameterized by classical parameters
         # such that the final state vector is a superposition of good partitionings
         circuit = qaoa_max_cut_circuit(qubits, betas, gammas, graph)
+
+        # we also want a simulation where the final quantum state vector is not collapsed via measurement
         circuit_no_measurement = qaoa_max_cut_circuit_no_measurement(qubits, betas, gammas, graph)
-        print (simulator.simulate(circuit_no_measurement))
+        final_state = simulator.simulate(circuit_no_measurement).final_state
+        print("The final quantum state vector without measurement collapse:")
+        print(final_state)
         quit()
 
-        final_state = simulator.simulate(circuit_no_measurement).final_state
-        nonlocal optimization_iter
-        nonlocal histograms
-
-        histograms[optimization_iter] = np.square(np.absolute(final_state))
+        # from amplitudes to measurement probabilities
+        meas_prob_dist_sched.append(np.square(np.absolute(final_state)))
 
         # Sample bitstrings from circuit
         result = simulator.run(circuit, repetitions=repetitions)
@@ -109,10 +119,11 @@ def main(repetitions=1000, maxiter=2):
             largest_cut_value_found = max_value
             largest_cut_found = bitstrings[max_value_index]
         mean = np.mean(values)
+        cut_mean_sched.append(mean)
 
-        optimization_iter += 1
         return -mean
 
+    # Provide classical parameters such that the classical computer can control quantum partitioning
     # Pick an initial guess
     x0 = np.random.uniform(-np.pi, np.pi, size=2 * p)
 
@@ -135,15 +146,49 @@ def main(repetitions=1000, maxiter=2):
     print('The approximation ratio achieved is {}.'.format(
         largest_cut_value_found / max_cut_value))
 
-    # Plot histograms as function of optimization iteration
-    fig, ax = plt.subplots()
+    # Visualize the data
+    fig, ((bax,gax),(dax,max)) = plt.subplots(2,2)
+
+    # Create a color coding and legend
+    max_opt_iter = len(meas_prob_dist_sched)
+    colors = plt.cm.Wistia(np.linspace(0,1,max_opt_iter))
+    custom_legend = [Line2D([0], [0], color=colors[0]),
+                     Line2D([0], [0], color=colors[-1])]
+
+    # Plot gammas and betas as function of optimization iteration
+    qaoa_layers = [i for i in range(p)]
+    bax.set_title('Beta optimization')
+    bax.set_ylabel('Radians')
+    bax.set_xlabel('QAOA layer')
+    gax.set_title('Gamma optimization')
+    gax.set_ylabel('Radians')
+    gax.set_xlabel('QAOA layer')
+    for opt_iter, (layer_betas,layer_gammas) in enumerate(zip(betas_sched,gammas_sched)):
+        bax.plot(qaoa_layers, layer_betas,  color=colors[opt_iter])
+        gax.plot(qaoa_layers, layer_gammas, color=colors[opt_iter])
+    bax.legend(custom_legend, ['Begin', 'End'], loc='lower right')
+    gax.legend(custom_legend, ['Begin', 'End'], loc='lower right')
+
+    # Plot meas_prob_dist_sched as function of optimization iteration
     basis_states = [i for i in range(1<<n)]
-    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter("{x:03b}"))
-    ax.xaxis.set_ticks(np.arange(0, 111, 1))
-    print (histograms)
-    for opt_iter, histogram in histograms.items():
-        plt.plot(basis_states, histogram, label='iter='+str(opt_iter))
-    plt.legend(loc='upper right')
+    dax.set_title('Measurement distribution')
+    dax.set_ylabel('Measurement probability')
+    dax.set_xlabel('Basis state')
+    dax.xaxis.set_major_formatter(ticker.StrMethodFormatter("{x:03b}"))
+    dax.xaxis.set_ticks(np.arange(0, 111, 1))
+    for opt_iter, histogram in enumerate(meas_prob_dist_sched):
+        dax.plot(basis_states, histogram, color=colors[opt_iter])
+    dax.legend(custom_legend, ['Begin', 'End'], loc='lower right')
+
+    # Plot mean cut value vs. optimization iteration
+    max.set_title('Cut value optimization')
+    max.set_ylabel('Cut value')
+    max.set_xlabel('Optimization iteration')
+    max.plot(cut_mean_sched,color=colors[max_opt_iter//2],label='QAOA mean cut value')
+    max.plot([max_cut_value for i in range(max_opt_iter)],color=colors[-1],label='True max-cut value')
+    max.legend(loc='lower right')
+
+    plt.tight_layout()
     plt.show()
 
 
