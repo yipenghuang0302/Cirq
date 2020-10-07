@@ -159,6 +159,7 @@ class _ResolverCache:
                 'SycamoreGate': cirq.google.SycamoreGate,
                 'TaggedOperation': cirq.TaggedOperation,
                 'ThreeDQubit': cirq.pasqal.ThreeDQubit,
+                'Result': cirq.Result,
                 'TrialResult': cirq.TrialResult,
                 'TwoDQubit': cirq.pasqal.TwoDQubit,
                 'TwoQubitMatrixGate': two_qubit_matrix_gate,
