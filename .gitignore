@@ -55,3 +55,7 @@ rtd_docs/generated
 *.csv
 *.vcg
 *.pdf
+*.inp
+*.meas
+*.out
+*.quil
