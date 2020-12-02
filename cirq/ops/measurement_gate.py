@@ -172,9 +172,9 @@ class MeasurementGate(raw_types.Gate):
                 lines.append(
                     formatter.format(
                         'X {0} # Inverting for following measurement\n', qubit))
-            lines.append(
-                formatter.format('MEASURE {0} {1:meas}[{2}]\n', qubit, self.key,
-                                 i))
+            # lines.append(
+            #     formatter.format('MEASURE {0} {1:meas}[{2}]\n', qubit, self.key,
+            #                      i))
         return ''.join(lines)
 
     def _op_repr_(self, qubits: Sequence['cirq.Qid']) -> str:

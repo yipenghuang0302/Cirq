@@ -146,17 +146,18 @@ class QuilOutput:
         return self.rename_defgates(''.join(output))
 
     def _write_quil(self, output_func: Callable[[str], None]) -> None:
-        output_func('# Created using Cirq.\n\n')
-        if len(self.measurements) > 0:
-            measurements_declared: Set[str] = set()
-            for m in self.measurements:
-                key = protocols.measurement_key(m)
-                if key in measurements_declared:
-                    continue
-                measurements_declared.add(key)
-                output_func('DECLARE {} BIT[{}]\n'.format(
-                    self.measurement_id_map[key], len(m.qubits)))
-            output_func('\n')
+        # output_func('# Created using Cirq.\n\n')
+        output_func('{}\n'.format(len(self.qubits)))
+        # if len(self.measurements) > 0:
+        #     measurements_declared: Set[str] = set()
+        #     for m in self.measurements:
+        #         key = protocols.measurement_key(m)
+        #         if key in measurements_declared:
+        #             continue
+        #         measurements_declared.add(key)
+        #         output_func('DECLARE {} BIT[{}]\n'.format(
+        #             self.measurement_id_map[key], len(m.qubits)))
+        #     output_func('\n')
 
         def keep(op: 'cirq.Operation') -> bool:
             return protocols.quil(op, formatter=self.formatter) is not None
