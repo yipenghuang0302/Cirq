@@ -80,8 +80,8 @@ qsim_max = 30
 
 def main(p=1):
 
-    for p in range(1,3):
-        for max_length in range(34,36,2):
+    for max_length in range(12,36,2):
+        for p in range(1,3):
 
             vertices_qsim = []
             vertices_all = []

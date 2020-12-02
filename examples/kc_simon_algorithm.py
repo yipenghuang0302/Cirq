@@ -56,7 +56,7 @@ lead to low frequency count in output string.
 """
 
 
-def main(qubit_count=3):
+def main(qubit_count=2):
 
     data = []  # we'll store here the results
 
@@ -73,6 +73,11 @@ def main(qubit_count=3):
 
     # Pick coefficients for the oracle and create a circuit to query it.
     oracle = make_oracle(input_qubits, output_qubits, secret_string)
+    oracle_no_meas = make_oracle(input_qubits, output_qubits, secret_string)
+
+    circuit_no_meas = make_simon_circuit_no_meas(input_qubits, output_qubits, oracle_no_meas)
+    kc_simulator = cirq.KnowledgeCompilationSimulator(circuit_no_meas, intermediate=True)
+    kc_result = kc_simulator.simulate(circuit_no_meas)
 
     # Embed oracle into special quantum circuit querying it exactly once
     circuit = make_simon_circuit(input_qubits, output_qubits, oracle)
@@ -92,6 +97,7 @@ def main(qubit_count=3):
             # Classical Post-Processing:
             flag = post_processing(data, results)
 
+    print( kc_result.state_vector() )
     print(f'Secret string = {secret_string}')
     freqs = Counter(data)
     print('Circuit:')
@@ -119,6 +125,28 @@ def make_oracle(input_qubits, output_qubits, secret_string):
           ]  # Swap some qubits to define oracle. We choose first and last:
     yield cirq.SWAP(output_qubits[pos[0]], output_qubits[pos[1]])
 
+
+def make_simon_circuit_no_meas(input_qubits, output_qubits, oracle):
+    """Solves for the secret period s of a 2-to-1 function such that
+    f(x) = f(y) iff x ⨁ y = s
+    """
+
+    c = cirq.Circuit()
+
+    # Initialize qubits.
+    c.append([
+        cirq.H.on_each(*input_qubits),
+    ])
+
+    # Query oracle.
+    c.append(oracle)
+
+    # Measure in X basis.
+    c.append([
+        cirq.H.on_each(*input_qubits),
+    ])
+
+    return c
 
 def make_simon_circuit(input_qubits, output_qubits, oracle):
     """Solves for the secret period s of a 2-to-1 function such that

@@ -151,6 +151,16 @@ class KnowledgeCompilationSimulator(simulator.SimulatesSamples,
     subtype = qubit_amplitude;
 }}
 potential ( {target_posterior} | '''
+    bif_prelude_qubit_init = \
+'''variable {target_posterior} {{
+  type discrete [ 2 ] {{ ONE, ZERO }};
+}}
+probability ( {target_posterior} '''
+    bif_prelude_qubit_norm = \
+'''variable {target_posterior} {{
+  type discrete [ 2 ] {{ ONE, ZERO }};
+}}
+probability ( {target_posterior} |'''
 
     net_prelude_noise = \
 '''node {target_posterior} {{
@@ -162,6 +172,12 @@ potential ( {target_posterior} | '''
     net_interlude = \
 ''') {{
     data = '''
+    bif_interlude_init = \
+''') {{
+  table '''
+    bif_interlude_norm = \
+''' ) {{
+'''
 
     def _net_data_format ( self, parents, assignments ):
         out_string = '('
@@ -171,6 +187,16 @@ potential ( {target_posterior} | '''
         else:
             out_string += '{data['+str(assignments)+'][0]} {data['+str(assignments)+'][1]}'
         out_string += ')'
+        return out_string
+    def _bif_data_format ( self, parents, parent_string, assignments ):
+        out_string = ''
+        if parents:
+            if parent_string!='':
+                parent_string+=','
+            out_string += self._bif_data_format ( parents[1:], parent_string+'ONE ', 2*assignments+1 )
+            out_string += self._bif_data_format ( parents[1:], parent_string+'ZERO', 2*assignments+0 )
+        else:
+            out_string += '  ('+parent_string+') {data['+str(assignments)+'][1]}, {data['+str(assignments)+'][0]};\n'
         return out_string
 
     # If CPT element is complex number, writes CPP style complex value for bayes-to-cnf
@@ -187,16 +213,37 @@ potential ( {target_posterior} | '''
         else:
             self._hash_to_symbols[hash(complex_symbols)%((1<<20)-65535)] = complex_symbols
             return(hash(complex_symbols)%((1<<20)-65535))
+    def _to_cpp_complex_hash_bif ( self, complex_symbols ):
+        if complex_symbols==0:
+            return '0'
+        if complex_symbols==1:
+            return '1'
+        elif isinstance ( complex_symbols, numbers.Number ) :
+            return(f'{complex_symbols.real:.8f}+{complex_symbols.imag:.8f}i')
+        # elif isinstance ( complex_symbols, numbers.Number ) and complex_symbols.imag==0:
+        #     return(f'{complex_symbols.real:.8f}')
+        else:
+            self._hash_to_symbols[hash(complex_symbols)%((1<<20)-65535)] = complex_symbols
+            return(hash(complex_symbols)%((1<<20)-65535))
 
     def _cpt_to_cpp_complex_hash ( self, cpt ):
         if hasattr(cpt,'__len__'):
             return [ self._cpt_to_cpp_complex_hash(element) for element in cpt ]
         else:
             return self._to_cpp_complex_hash ( cpt )
+    def _cpt_to_cpp_complex_hash_bif ( self, cpt ):
+        if hasattr(cpt,'__len__'):
+            return [ self._cpt_to_cpp_complex_hash_bif(element) for element in cpt ]
+        else:
+            return self._to_cpp_complex_hash_bif ( cpt )
 
     net_postlude = \
 ''';
 }}
+
+'''
+    bif_postlude = \
+'''}}
 
 '''
 
@@ -233,7 +280,7 @@ potential ( {target_posterior} | '''
         circuit = (program if isinstance(program, circuits.Circuit) else program.to_circuit())
         circuit = circuits.Circuit(self._noise.noisy_moments(circuit, sorted(circuit.all_qubits())))
 
-        for _ in range(1):
+        for _ in range(0):
             if not self._intermediate: # messes up moment steps, moment step samping
                 optimizers.ExpandComposite().optimize_circuit(circuit) # seems to actually increase BN size
                 # optimizers.ConvertToCzAndSingleGates().optimize_circuit(circuit) # cannot work with params
@@ -255,6 +302,9 @@ potential ( {target_posterior} | '''
         net_file = open('circuit.net', 'w')
         net_file.write('net {}\n\n')
 
+        bif_file = open('circuit.bif', 'w')
+        bif_file.write('network unknown {}\n\n')
+
         # initial_state: Union[int, np.ndarray],
         # We are only able to handle classical initial states
         # prevent later calls to simulator from changing the initial state, if already fixed
@@ -271,22 +321,31 @@ potential ( {target_posterior} | '''
             qubit_to_last_moment_index[target_qubit] = 0
 
             target_posterior =  'n' + str(qubit_to_last_moment_index[target_qubit]).zfill(4) + 'q' + str(target_qubit).zfill(4)
-            node_string = self.net_prelude_qubit
-            node_string += self.net_interlude
+            net_string = self.net_prelude_qubit
+            net_string += self.net_interlude
+            bif_string = self.bif_prelude_qubit_init
+            bif_string += self.bif_interlude_init
 
             if initial_state is not None:
-                node_string += '({} {})'.format (
+                net_string += '({} {})'.format (
                     '0' if initial_value else '1',
                     '1' if initial_value else '0'
+                    )
+                bif_string += '{}, {}'.format (
+                    '1' if initial_value else '0',
+                    '0' if initial_value else '1'
                     )
             else:
                 qi0_sym = 'i0' + 'q'+str(target_qubit).zfill(4)
                 qi1_sym = 'i1' + 'q'+str(target_qubit).zfill(4)
-                node_string += '({} {})'.format ( hash(qi0_sym)%((1<<20)-65535), hash(qi1_sym)%((1<<20)-65535) )
+                net_string += '({} {})'.format ( hash(qi0_sym)%((1<<20)-65535), hash(qi1_sym)%((1<<20)-65535) )
+                bif_string += '{}, {}'.format ( hash(qi1_sym)%((1<<20)-65535), hash(qi0_sym)%((1<<20)-65535) )
 
-            node_string += self.net_postlude
+            net_string += self.net_postlude
+            bif_string += self.net_postlude
 
-            net_file.write(node_string.format(target_posterior=target_posterior))
+            net_file.write(net_string.format(target_posterior=target_posterior))
+            bif_file.write(bif_string.format(target_posterior=target_posterior))
 
         self._hash_to_symbols = {}
         for moment_index, moment in enumerate(circuit, start=1):
@@ -307,18 +366,18 @@ potential ( {target_posterior} | '''
 
                     qubit = op.qubits[0]
 
-                    rvc_node_string = self.net_prelude_noise
+                    rvc_net_string = self.net_prelude_noise
                     depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
                     parent = 'n' + depth + 'q' + str(qubit).zfill(4)
-                    rvc_node_string += parent + ' '
-                    rvc_node_string += self.net_interlude
-                    rvc_node_string += '( '
-                    rvc_node_string += '(1 0 0 0) (+{cos_term} -{sin_term} 0 0) '
-                    rvc_node_string += ')'
-                    rvc_node_string += self.net_postlude
+                    rvc_net_string += parent + ' '
+                    rvc_net_string += self.net_interlude
+                    rvc_net_string += '( '
+                    rvc_net_string += '(1 0 0 0) (+{cos_term} -{sin_term} 0 0) '
+                    rvc_net_string += ')'
+                    rvc_net_string += self.net_postlude
 
                     target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
-                    net_file.write(rvc_node_string.format(
+                    net_file.write(rvc_net_string.format(
                         target_posterior='rvc_'+target_posterior,
                         cos_term=self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)),
                         sin_term=self._to_cpp_complex_hash(cmath.sqrt(  op.gate.gamma))
@@ -329,32 +388,32 @@ potential ( {target_posterior} | '''
 
                     qubit = op.qubits[0]
 
-                    rvc_node_string = self.net_prelude_noise
+                    rvc_net_string = self.net_prelude_noise
                     depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
                     parent = 'n' + depth + 'q' + str(qubit).zfill(4)
-                    rvc_node_string += parent + ' '
-                    rvc_node_string += self.net_interlude
-                    rvc_node_string += '( '
-                    rvc_node_string += '(1 0 0 0) (+{cos_term} -{sin_term} 0 0) '
-                    rvc_node_string += ')'
-                    rvc_node_string += self.net_postlude
+                    rvc_net_string += parent + ' '
+                    rvc_net_string += self.net_interlude
+                    rvc_net_string += '( '
+                    rvc_net_string += '(1 0 0 0) (+{cos_term} -{sin_term} 0 0) '
+                    rvc_net_string += ')'
+                    rvc_net_string += self.net_postlude
 
-                    node_string = self.net_prelude_qubit
-                    node_string += 'rvc_{target_posterior} '
-                    node_string += parent + ' '
-                    node_string += self.net_interlude
-                    node_string += '( '
-                    node_string += '((1 0)(0 1)) ((0 1)(1 0)) ((1 0)(0 1)) ((1 0)(0 1)) '
-                    node_string += ')'
-                    node_string += self.net_postlude
+                    net_string = self.net_prelude_qubit
+                    net_string += 'rvc_{target_posterior} '
+                    net_string += parent + ' '
+                    net_string += self.net_interlude
+                    net_string += '( '
+                    net_string += '((1 0)(0 1)) ((0 1)(1 0)) ((1 0)(0 1)) ((1 0)(0 1)) '
+                    net_string += ')'
+                    net_string += self.net_postlude
 
                     target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
-                    net_file.write(rvc_node_string.format(
+                    net_file.write(rvc_net_string.format(
                         target_posterior='rvc_'+target_posterior,
                         cos_term=self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)),
                         sin_term=self._to_cpp_complex_hash(cmath.sqrt(  op.gate.gamma))
                         ))
-                    net_file.write(node_string.format(
+                    net_file.write(net_string.format(
                         target_posterior=target_posterior
                         ))
 
@@ -365,50 +424,50 @@ potential ( {target_posterior} | '''
 
                     qubit = op.qubits[0]
 
-                    rvm_node_string = self.net_prelude_noise
-                    rvm_node_string += self.net_interlude
-                    rvm_node_string += '( '
-                    rvm_node_string += '{i_term} {x_term} 0 0 '
-                    rvm_node_string += ')'
-                    rvm_node_string += self.net_postlude
+                    rvm_net_string = self.net_prelude_noise
+                    rvm_net_string += self.net_interlude
+                    rvm_net_string += '( '
+                    rvm_net_string += '{i_term} {x_term} 0 0 '
+                    rvm_net_string += ')'
+                    rvm_net_string += self.net_postlude
 
-                    rvc_node_string = self.net_prelude_noise
-                    rvc_node_string += 'rvm_{target_posterior} '
+                    rvc_net_string = self.net_prelude_noise
+                    rvc_net_string += 'rvm_{target_posterior} '
                     depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
                     parent = 'n' + depth + 'q' + str(qubit).zfill(4)
-                    rvc_node_string += parent + ' '
-                    rvc_node_string += self.net_interlude
-                    rvc_node_string += '( '
-                    rvc_node_string += '((1 0 0 0) (+{cos_term} -{sin_term} 0 0)) '
-                    rvc_node_string += '((+{cos_term} -{sin_term} 0 0) (1 0 0 0)) '
-                    rvc_node_string += '((1 0 0 0) (1 0 0 0)) '
-                    rvc_node_string += '((1 0 0 0) (1 0 0 0)) '
-                    rvc_node_string += ')'
-                    rvc_node_string += self.net_postlude
+                    rvc_net_string += parent + ' '
+                    rvc_net_string += self.net_interlude
+                    rvc_net_string += '( '
+                    rvc_net_string += '((1 0 0 0) (+{cos_term} -{sin_term} 0 0)) '
+                    rvc_net_string += '((+{cos_term} -{sin_term} 0 0) (1 0 0 0)) '
+                    rvc_net_string += '((1 0 0 0) (1 0 0 0)) '
+                    rvc_net_string += '((1 0 0 0) (1 0 0 0)) '
+                    rvc_net_string += ')'
+                    rvc_net_string += self.net_postlude
 
-                    node_string = self.net_prelude_qubit
-                    node_string += 'rvc_{target_posterior} '
+                    net_string = self.net_prelude_qubit
+                    net_string += 'rvc_{target_posterior} '
                     depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
                     parent = 'n' + depth + 'q' + str(qubit).zfill(4)
-                    node_string += parent + ' '
-                    node_string += self.net_interlude
-                    node_string += '( '
-                    node_string += '((1 0)(0 1)) ((0 1)(1 0)) ((1 0)(0 1)) ((1 0)(0 1)) '
-                    node_string += ')'
-                    node_string += self.net_postlude
+                    net_string += parent + ' '
+                    net_string += self.net_interlude
+                    net_string += '( '
+                    net_string += '((1 0)(0 1)) ((0 1)(1 0)) ((1 0)(0 1)) ((1 0)(0 1)) '
+                    net_string += ')'
+                    net_string += self.net_postlude
 
                     target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
-                    net_file.write(rvm_node_string.format(
+                    net_file.write(rvm_net_string.format(
                         target_posterior='rvm_rvc_'+target_posterior,
                         i_term=self._to_cpp_complex_hash(cmath.sqrt(  op.gate.p)),
                         x_term=self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.p))
                         ))
-                    net_file.write(rvc_node_string.format(
+                    net_file.write(rvc_net_string.format(
                         target_posterior='rvc_'+target_posterior,
                         cos_term=self._to_cpp_complex_hash(cmath.sqrt(1-op.gate.gamma)),
                         sin_term=self._to_cpp_complex_hash(cmath.sqrt(  op.gate.gamma))
                         ))
-                    net_file.write(node_string.format(
+                    net_file.write(net_string.format(
                         target_posterior=target_posterior
                         ))
 
@@ -417,44 +476,44 @@ potential ( {target_posterior} | '''
                 elif protocols.has_mixture(op) and 1<len(protocols.mixture(op)):
                     self._num_noise += 1
 
-                    rvm_node_string = self.net_prelude_noise
-                    rvm_node_string += self.net_interlude
-                    rvm_node_string += '( '
+                    rvm_net_string = self.net_prelude_noise
+                    rvm_net_string += self.net_interlude
+                    rvm_net_string += '( '
                     for index in range(4):
                         if index<len(protocols.mixture(op)):
                             component = protocols.mixture(op)[index]
-                            rvm_node_string += self._to_cpp_complex_hash(cmath.sqrt(component[0])) + ' '
+                            rvm_net_string += self._to_cpp_complex_hash(cmath.sqrt(component[0])) + ' '
                         else:
-                            rvm_node_string += '0 '
-                    rvm_node_string += ')'
-                    rvm_node_string += self.net_postlude
+                            rvm_net_string += '0 '
+                    rvm_net_string += ')'
+                    rvm_net_string += self.net_postlude
 
                     qubit = op.qubits[0]
 
-                    node_string = self.net_prelude_qubit
-                    node_string += 'rvm_{target_posterior} '
+                    net_string = self.net_prelude_qubit
+                    net_string += 'rvm_{target_posterior} '
                     parents=[]
                     depth = str(qubit_to_last_moment_index[qubit]).zfill(4)
                     parent = 'n' + depth + 'q' + str(qubit).zfill(4)
-                    node_string += parent + ' '
+                    net_string += parent + ' '
                     parents.append(parent)
-                    node_string += self.net_interlude
-                    node_string += '( '
+                    net_string += self.net_interlude
+                    net_string += '( '
                     for index in range(4):
                         if index<len(protocols.mixture(op)):
                             component = protocols.mixture(op)[index]
-                            node_string += self._net_data_format(parents,0).format(data=self._cpt_to_cpp_complex_hash(component[1]))
-                            node_string += ' '
+                            net_string += self._net_data_format(parents,0).format(data=self._cpt_to_cpp_complex_hash(component[1]))
+                            net_string += ' '
                         else:
-                            node_string += '((1 0)(0 1)) '
-                    node_string += ')'
-                    node_string += self.net_postlude
+                            net_string += '((1 0)(0 1)) '
+                    net_string += ')'
+                    net_string += self.net_postlude
 
                     target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(qubit).zfill(4)
-                    net_file.write(rvm_node_string.format(
+                    net_file.write(rvm_net_string.format(
                         target_posterior='rvm_'+target_posterior,
                         ))
-                    net_file.write(node_string.format(
+                    net_file.write(net_string.format(
                         target_posterior=target_posterior,
                         ))
 
@@ -481,22 +540,35 @@ potential ( {target_posterior} | '''
 
                     for target_qubit, transposed_cpt in zip(reversed(op.qubits), reversed(transposed_cpts)):
 
-                        node_string = self.net_prelude_qubit
+                        net_string = self.net_prelude_qubit
+                        bif_string = self.bif_prelude_qubit_norm
 
                         parents=[]
+                        parent_count = 0
                         for control_qubit in op.qubits:
                             depth = str(qubit_to_last_moment_index[control_qubit]).zfill(4)
                             parent = 'n' + depth + 'q' + str(control_qubit).zfill(4)
-                            node_string += parent + ' '
+                            net_string += parent + ' '
+                            if parent_count>0:
+                                bif_string += ','
+                            bif_string += ' ' + parent
                             parents.append(parent)
-                        node_string += self.net_interlude
-                        node_string += self._net_data_format ( parents, 0 )
-                        node_string += self.net_postlude
+                            parent_count += 1
+                        net_string += self.net_interlude
+                        net_string += self._net_data_format ( parents, 0 )
+                        net_string += self.net_postlude
+                        bif_string += self.bif_interlude_norm
+                        bif_string += self._bif_data_format ( parents, '', 0 )
+                        bif_string += self.bif_postlude
 
                         target_posterior = 'n' + str(moment_index).zfill(4) + 'q' + str(target_qubit).zfill(4)
-                        net_file.write(node_string.format(
+                        net_file.write(net_string.format(
                             target_posterior=target_posterior,
                             data=self._cpt_to_cpp_complex_hash(transposed_cpt.transpose())
+                            ))
+                        bif_file.write(bif_string.format(
+                            target_posterior=target_posterior,
+                            data=self._cpt_to_cpp_complex_hash_bif(transposed_cpt.transpose())
                             ))
 
                     # update depth
@@ -504,6 +576,7 @@ potential ( {target_posterior} | '''
                         qubit_to_last_moment_index[target_qubit] = moment_index
 
         net_file.close()
+        bif_file.close()
 
         # Bayesian network to conjunctive normal form
         # TODO: autoinstall this
@@ -547,12 +620,12 @@ potential ( {target_posterior} | '''
             for _ in range(2):
                 stdout = os.system(path_to_qACE + '/ace_v3.0_linux86/c2d_linux -simplify_s -in circuit.net.cnf -visualize')
                 if not self._intermediate:
-                    # stdout = os.system('/common/users/yh804/research/dsharp/dsharp -FrA statistics.txt -Fnnf circuit.net.cnf_simplified.nnf circuit.net.cnf')
+                    # stdout = os.system('/common/users/yh804/research/dsharp/dsharp -FrA statistics.txt -Fnnf circuit.net.cnf_simplified.nnf circuit.net.cnf_simplified')
                     # stdout = os.system('/common/users/yh804/research/d4 circuit.net.cnf -out=circuit.net.cnf_simplified.nnf')
                     stdout = os.system(path_to_qACE + '/ace_v3.0_linux86/c2d_linux -in circuit.net.cnf_simplified -exist variables.file -suppress_ane -reduce -visualize')
                     # stdout = os.system(path_to_qACE + '/ace_v3.0_linux86/c2d_linux -in circuit.net.cnf_simplified -exist variables.file -dt_method 3 -determined circuit.net.pmap -suppress_ane -reduce -minimize')
                 else:
-                    # stdout = os.system('/common/users/yh804/research/dsharp/dsharp -FrA statistics.txt -Fnnf circuit.net.cnf_simplified.nnf circuit.net.cnf')
+                    # stdout = os.system('/common/users/yh804/research/dsharp/dsharp -FrA statistics.txt -Fnnf circuit.net.cnf_simplified.nnf circuit.net.cnf_simplified')
                     # stdout = os.system('/common/users/yh804/research/d4 circuit.net.cnf -out=circuit.net.cnf_simplified.nnf')
                     stdout = os.system(path_to_qACE + '/ace_v3.0_linux86/c2d_linux -in circuit.net.cnf_simplified -dt_method 3 -suppress_ane -reduce -visualize')
                 # stdout = os.system(path_to_qACE + '/miniC2D-1.0.0/bin/linux/miniC2D -c circuit.net.cnf_simplified')

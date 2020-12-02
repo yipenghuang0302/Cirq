@@ -31,7 +31,7 @@ qtorch_max = 9
 def main():
 
     for steps in range(1,3):
-        for max_length in range(6,7):
+        for max_length in range(4,7):
 
             grid_points_qsim = []
             grid_points_qtorch = []

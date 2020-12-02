@@ -43,7 +43,7 @@ import random
 import cirq
 
 
-def main(qubit_count = 8):
+def main(qubit_count = 2):
     circuit_sample_count = 300
 
     # Choose qubits to use.

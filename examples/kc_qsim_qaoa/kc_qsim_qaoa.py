@@ -76,8 +76,8 @@ kc_smp_time_dict = {}
 
 def main(p=1):
 
-    for max_length in range(28,32,2):
-        for p in range(3,4):
+    for max_length in range(8,32,2):
+        for p in range(1,3):
 
             vertices = []
             for n in range(4,max_length,2):

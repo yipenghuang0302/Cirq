@@ -35,7 +35,7 @@ import numpy as np
 
 def main():
 
-    for _ in range(16):
+    for _ in range(1):
         # Choose qubits to use.
         q0, q1 = cirq.LineQubit.range(2)
 
