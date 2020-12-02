@@ -13,13 +13,12 @@
 # limitations under the License.
 """Protocol for object that have measurement keys."""
 
-from typing import AbstractSet, Any, Iterable
+from typing import AbstractSet, Any, Dict, Iterable
 
 from typing_extensions import Protocol
 
 from cirq._doc import doc_private
-from cirq.protocols.decompose_protocol import \
-    _try_decompose_into_operations_and_qubits
+from cirq.protocols.decompose_protocol import _try_decompose_into_operations_and_qubits
 
 # This is a special indicator value used by the inverse method to determine
 # whether or not the caller provided a 'default' argument.
@@ -65,6 +64,13 @@ class SupportsMeasurementKey(Protocol):
         will be stored.
         """
 
+    @doc_private
+    def _with_measurement_key_mapping_(self, key_map: Dict[str, str]):
+        """Return a copy of this object with the measurement keys remapped.
+
+        This method allows measurement keys to be reassigned at runtime.
+        """
+
 
 def measurement_key(val: Any, default: Any = RaiseTypeErrorIfNotProvided):
     """Get the single measurement key for the given value.
@@ -92,8 +98,7 @@ def measurement_key(val: Any, default: Any = RaiseTypeErrorIfNotProvided):
         return next(iter(result))
 
     if len(result) > 1:
-        raise ValueError(f'Got multiple measurement keys ({result!r}) '
-                         f'from {val!r}.')
+        raise ValueError(f'Got multiple measurement keys ({result!r}) from {val!r}.')
 
     if default is not RaiseTypeErrorIfNotProvided:
         return default
@@ -101,8 +106,7 @@ def measurement_key(val: Any, default: Any = RaiseTypeErrorIfNotProvided):
     raise TypeError(f"Object of type '{type(val)}' had no measurement keys.")
 
 
-def measurement_keys(val: Any, *,
-                     allow_decompose: bool = True) -> AbstractSet[str]:
+def measurement_keys(val: Any, *, allow_decompose: bool = True) -> AbstractSet[str]:
     """Gets the measurement keys of measurements within the given value.
 
     Args:
@@ -143,3 +147,13 @@ def is_measurement(val: Any) -> bool:
     a non-empty result for them.
     """
     return bool(measurement_keys(val))
+
+
+def with_measurement_key_mapping(val: Any, key_map: Dict[str, str]):
+    """Remaps the target's measurement keys according to the provided key_map.
+
+    This method can be used to reassign measurement keys at runtime, or to
+    assign measurement keys from a higher-level object (such as a Circuit).
+    """
+    getter = getattr(val, '_with_measurement_key_mapping_', None)
+    return NotImplemented if getter is None else getter(key_map)
