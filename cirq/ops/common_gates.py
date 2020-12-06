@@ -237,7 +237,7 @@ class XPowGate(eigen_gate.EigenGate, gate_features.SingleQubitGate):
     ) -> Optional[str]:
         if self._exponent == 1:
             return formatter.format('X {0}\n', qubits[0])
-        return formatter.format('RX({0}) {1}\n', self._exponent * np.pi, qubits[0])
+        return formatter.format('RX {0} {1}\n', self._exponent * np.pi, qubits[0])
 
     @property
     def phase_exponent(self):
@@ -428,7 +428,7 @@ class YPowGate(eigen_gate.EigenGate, gate_features.SingleQubitGate):
     ) -> Optional[str]:
         if self._exponent == 1:
             return formatter.format('Y {0}\n', qubits[0])
-        return formatter.format('RY({0}) {1}\n', self._exponent * np.pi, qubits[0])
+        return formatter.format('RY {0} {1}\n', self._exponent * np.pi, qubits[0])
 
     @property
     def phase_exponent(self):
@@ -669,7 +669,7 @@ class ZPowGate(eigen_gate.EigenGate, gate_features.SingleQubitGate):
     ) -> Optional[str]:
         if self._exponent == 1:
             return formatter.format('Z {0}\n', qubits[0])
-        return formatter.format('RZ({0}) {1}\n', self._exponent * np.pi, qubits[0])
+        return formatter.format('RZ {0} {1}\n', self._exponent * np.pi, qubits[0])
 
     def __str__(self) -> str:
         if self._global_shift == -0.5:
@@ -1083,7 +1083,7 @@ class CZPowGate(
         if self._exponent == 1:
             return formatter.format('CZ {0} {1}\n', qubits[0], qubits[1])
         return formatter.format(
-            'CPHASE({0}) {1} {2}\n', self._exponent * np.pi, qubits[0], qubits[1]
+            'CPHASE {0} {1} {2}\n', self._exponent * np.pi, qubits[0], qubits[1]
         )
 
     def _has_stabilizer_effect_(self) -> Optional[bool]:

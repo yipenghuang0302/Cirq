@@ -321,7 +321,7 @@ class ZZPowGate(
             return formatter.format('Z {0}\nZ {1}\n', qubits[0], qubits[1])
 
         return formatter.format(
-            'RZ {0} {1}\nRZ {2} {3}\n',
+            'RZ({0}) {1}\nRZ({2}) {3}\n',
             self._exponent * np.pi,
             qubits[0],
             self._exponent * np.pi,

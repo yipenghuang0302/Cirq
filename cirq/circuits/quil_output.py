@@ -146,6 +146,7 @@ class QuilOutput:
 
     def _write_quil(self, output_func: Callable[[str], None]) -> None:
         # output_func('# Created using Cirq.\n\n')
+        output_func('{}\n'.format(len(self.qubits)))
         # if len(self.measurements) > 0:
         #     measurements_declared: Set[str] = set()
         #     for m in self.measurements:
