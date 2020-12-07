@@ -78,14 +78,12 @@ def test_run_bit_flips(dtype):
     q0, q1 = cirq.LineQubit.range(2)
     for b0 in [0, 1]:
         for b1 in [0, 1]:
-            circuit = cirq.Circuit((cirq.X**b0)(q0),
-                                            (cirq.X**b1)(q1),
-                                            cirq.measure(q0),
-                                            cirq.measure(q1))
+            circuit = cirq.Circuit(
+                (cirq.X ** b0)(q0), (cirq.X ** b1)(q1), cirq.measure(q0), cirq.measure(q1)
+            )
             simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
             result = simulator.run(circuit)
-            np.testing.assert_equal(result.measurements,
-                                    {'0': [[b0]], '1': [[b1]]})
+            np.testing.assert_equal(result.measurements, {'0': [[b0]], '1': [[b1]]})
 
 
 @pytest.mark.parametrize('dtype', [np.complex64, np.complex128])
@@ -93,17 +91,15 @@ def test_run_measure_at_end_no_repetitions(dtype):
     q0, q1 = cirq.LineQubit.range(2)
     for b0 in [0, 1]:
         for b1 in [0, 1]:
-            circuit = cirq.Circuit((cirq.X**b0)(q0), (cirq.X**b1)(q1),
-                                   cirq.measure(q0), cirq.measure(q1))
+            circuit = cirq.Circuit(
+                (cirq.X ** b0)(q0), (cirq.X ** b1)(q1), cirq.measure(q0), cirq.measure(q1)
+            )
             simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
-            with mock.patch.object(simulator,
-                                   '_base_iterator',
-                                   wraps=simulator._base_iterator) as mock_sim:
+            with mock.patch.object(simulator, '_base_iterator', wraps=simulator._base_iterator) as mock_sim:
                 result = simulator.run(circuit, repetitions=0)
-                np.testing.assert_equal(result.measurements, {
-                    '0': np.empty([0, 1]),
-                    '1': np.empty([0, 1])
-                })
+                np.testing.assert_equal(
+                    result.measurements, {'0': np.empty([0, 1]), '1': np.empty([0, 1])}
+                )
                 assert result.repetitions == 0
                 # We expect one call per b0,b1.
                 assert mock_sim.call_count == 0
@@ -121,16 +117,13 @@ def test_run_repetitions_measure_at_end(dtype):
     q0, q1 = cirq.LineQubit.range(2)
     for b0 in [0, 1]:
         for b1 in [0, 1]:
-            circuit = cirq.Circuit((cirq.X**b0)(q0),
-                                            (cirq.X**b1)(q1),
-                                            cirq.measure(q0),
-                                            cirq.measure(q1))
+            circuit = cirq.Circuit(
+                (cirq.X**b0)(q0), (cirq.X**b1)(q1), cirq.measure(q0), cirq.measure(q1)
+            )
             simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
-            with mock.patch.object(simulator, '_base_iterator',
-                       wraps=simulator._base_iterator) as mock_sim:
+            with mock.patch.object(simulator, '_base_iterator', wraps=simulator._base_iterator) as mock_sim:
                 result = simulator.run(circuit, repetitions=3)
-                np.testing.assert_equal(result.measurements,
-                                        {'0': [[b0]] * 3, '1': [[b1]] * 3})
+                np.testing.assert_equal(result.measurements, {'0': [[b0]] * 3, '1': [[b1]] * 3})
                 assert result.repetitions == 3
                 # We expect one call per b0,b1.
                 assert mock_sim.call_count == 1
@@ -142,16 +135,15 @@ def test_run_invert_mask_measure_not_terminal(dtype):
     for b0 in [0, 1]:
         for b1 in [0, 1]:
             circuit = cirq.Circuit(
-                (cirq.X**b0)(q0), (cirq.X**b1)(q1),
+                (cirq.X**b0)(q0),
+                (cirq.X**b1)(q1),
                 cirq.measure(q0, q1, key='m', invert_mask=(True, False)),
-                cirq.X(q0))
+                cirq.X(q0)
+            )
             simulator = cirq.KnowledgeCompilationSimulator(circuit, intermediate=True, dtype=dtype)
-            with mock.patch.object(simulator,
-                                   '_base_iterator',
-                                   wraps=simulator._base_iterator) as mock_sim:
+            with mock.patch.object(simulator, '_base_iterator', wraps=simulator._base_iterator) as mock_sim:
                 result = simulator.run(circuit, repetitions=3)
-                np.testing.assert_equal(result.measurements,
-                                        {'m': [[1 - b0, b1]] * 3})
+                np.testing.assert_equal(result.measurements, {'m': [[1 - b0, b1]] * 3})
                 assert result.repetitions == 3
                 # We expect repeated calls per b0,b1 instead of one call.
                 assert mock_sim.call_count == 3

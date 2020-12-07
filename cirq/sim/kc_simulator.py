@@ -26,9 +26,9 @@ from cirq.sim import simulator, state_vector, density_matrix_utils, state_vector
 
 import os, subprocess, re, csv, sys, time
 
-path_to_bayes_to_cnf = "/common/users/yh804/research/bayes-to-cnf"
-path_to_qACE = "/common/users/yh804/research/qACE"
-path_to_Cirq = "/common/users/yh804/research/Google/Cirq"
+path_to_bayes_to_cnf = "/common/home/yh804/research/bayes-to-cnf"
+path_to_qACE = "/common/home/yh804/research/qACE"
+path_to_Cirq = "/common/home/yh804/research/Google/Cirq"
 
 class KnowledgeCompilationSimulator(simulator.SimulatesSamples,
                                     state_vector_simulator.SimulatesIntermediateStateVector):
@@ -208,8 +208,6 @@ potential ( {target_posterior} | '''
             return '1'
         elif isinstance ( complex_symbols, numbers.Number ) :
             return(f'{complex_symbols.real:.8f},{complex_symbols.imag:.8f}')
-        # elif isinstance ( complex_symbols, numbers.Number ) and complex_symbols.imag==0:
-        #     return(f'{complex_symbols.real:.8f}')
         else:
             self._hash_to_symbols[hash(complex_symbols)%((1<<20)-65535)] = complex_symbols
             return(hash(complex_symbols)%((1<<20)-65535))
@@ -220,8 +218,6 @@ potential ( {target_posterior} | '''
             return '1'
         elif isinstance ( complex_symbols, numbers.Number ) :
             return(f'{complex_symbols.real:.8f}+{complex_symbols.imag:.8f}i')
-        # elif isinstance ( complex_symbols, numbers.Number ) and complex_symbols.imag==0:
-        #     return(f'{complex_symbols.real:.8f}')
         else:
             self._hash_to_symbols[hash(complex_symbols)%((1<<20)-65535)] = complex_symbols
             return(hash(complex_symbols)%((1<<20)-65535))
@@ -274,13 +270,13 @@ potential ( {target_posterior} | '''
         self._dtype = dtype
         self._prng = value.parse_random_state(seed)
         self._noise = devices.NoiseModel.from_noise_model_like(noise)
-        self._ignore_measurement_results = (ignore_measurement_results)
+        self._ignore_measurement_results = ignore_measurement_results
         self._intermediate = intermediate
 
         circuit = (program if isinstance(program, circuits.Circuit) else program.to_circuit())
         circuit = circuits.Circuit(self._noise.noisy_moments(circuit, sorted(circuit.all_qubits())))
 
-        for _ in range(0):
+        for _ in range(1):
             if not self._intermediate: # messes up moment steps, moment step samping
                 optimizers.ExpandComposite().optimize_circuit(circuit) # seems to actually increase BN size
                 # optimizers.ConvertToCzAndSingleGates().optimize_circuit(circuit) # cannot work with params
@@ -521,11 +517,10 @@ potential ( {target_posterior} | '''
 
                 elif not isinstance(op.gate,ops.MeasurementGate):
 
-                    # print("HERE4")
                     # print(repr(op))
                     # print(isinstance(op.gate, ops.CZPowGate))
 
-                    if protocols.has_unitary(op) or isinstance(op.gate, ops.CZPowGate):
+                    if protocols.has_unitary(op): # or isinstance(op.gate, ops.CZPowGate):
                         unitary_matrix = protocols.unitary(op)
                     else: # protocols.has_channel(op)
                         unitary_matrix = [[0+0j,0+0j],[0+0j,0+0j]]
@@ -588,14 +583,14 @@ potential ( {target_posterior} | '''
             stdout = os.system(path_to_bayes_to_cnf + '/bin/bn-to-cnf -d -a -i circuit.net -w -s')
             # stdout = os.system(path_to_qACE + '/ace_v3.0_linux86/compile -encodeOnly -retainFiles -forceC2d -cd06 circuit.net')
             # -e and -b used together causes moment steps simulation to fail
-            # -c incompatible with noise mixtures becausethere is no mutal exclusive constraints on noise possibilities
+            # -c incompatible with noise mixtures becausethere is no mutual exclusive constraints on noise possibilities
         # print (stdout)
 
+        # Regular expressions for manipulating the LMAP file
         self._node_re_compile = re.compile(r'cc\$I\$(\d+)\$1.0\$\+\$n(\d+)q(\d+)\$') # are negative literals and opt bool valid?
         self._int_re_compile = re.compile(r'cc\$C\$\d+\$(\d+)')
         existentially_quantified_variables = []
         with open('circuit.net.cnf', 'r') as cnf_file:
-        # with open('circuit.net.lmap', 'r') as cnf_file:
             with open('circuit.lmap', 'w') as lmap_file:
                 for line in cnf_file:
                     if line.startswith('cc'):
@@ -620,13 +615,13 @@ potential ( {target_posterior} | '''
             for _ in range(2):
                 stdout = os.system(path_to_qACE + '/ace_v3.0_linux86/c2d_linux -simplify_s -in circuit.net.cnf -visualize')
                 if not self._intermediate:
-                    # stdout = os.system('/common/users/yh804/research/dsharp/dsharp -FrA statistics.txt -Fnnf circuit.net.cnf_simplified.nnf circuit.net.cnf_simplified')
-                    # stdout = os.system('/common/users/yh804/research/d4 circuit.net.cnf -out=circuit.net.cnf_simplified.nnf')
+                    # stdout = os.system('/common/home/yh804/research/dsharp/dsharp -FrA statistics.txt -Fnnf circuit.net.cnf_simplified.nnf circuit.net.cnf_simplified')
+                    # stdout = os.system('/common/home/yh804/research/d4 circuit.net.cnf -out=circuit.net.cnf_simplified.nnf')
                     stdout = os.system(path_to_qACE + '/ace_v3.0_linux86/c2d_linux -in circuit.net.cnf_simplified -exist variables.file -suppress_ane -reduce -visualize')
                     # stdout = os.system(path_to_qACE + '/ace_v3.0_linux86/c2d_linux -in circuit.net.cnf_simplified -exist variables.file -dt_method 3 -determined circuit.net.pmap -suppress_ane -reduce -minimize')
                 else:
-                    # stdout = os.system('/common/users/yh804/research/dsharp/dsharp -FrA statistics.txt -Fnnf circuit.net.cnf_simplified.nnf circuit.net.cnf_simplified')
-                    # stdout = os.system('/common/users/yh804/research/d4 circuit.net.cnf -out=circuit.net.cnf_simplified.nnf')
+                    # stdout = os.system('/common/home/yh804/research/dsharp/dsharp -FrA statistics.txt -Fnnf circuit.net.cnf_simplified.nnf circuit.net.cnf_simplified')
+                    # stdout = os.system('/common/home/yh804/research/d4 circuit.net.cnf -out=circuit.net.cnf_simplified.nnf')
                     stdout = os.system(path_to_qACE + '/ace_v3.0_linux86/c2d_linux -in circuit.net.cnf_simplified -dt_method 3 -suppress_ane -reduce -visualize')
                 # stdout = os.system(path_to_qACE + '/miniC2D-1.0.0/bin/linux/miniC2D -c circuit.net.cnf_simplified')
                 # print (stdout)
