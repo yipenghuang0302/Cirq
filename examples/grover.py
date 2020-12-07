@@ -85,8 +85,8 @@ def bitstring(bits):
 
 
 def main():
-    qubit_count = 3
-    circuit_sample_count = 100
+    qubit_count = 2
+    circuit_sample_count = 10
 
     # Set up input and output qubits.
     (input_qubits, output_qubit) = set_io_qubits(qubit_count)
