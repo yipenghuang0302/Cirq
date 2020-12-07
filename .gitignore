@@ -49,6 +49,7 @@ docs/api_docs
 
 
 *.net
+*.bif
 *.lmap
 *.file
 *.cnf
@@ -62,3 +63,4 @@ docs/api_docs
 *.meas
 *.out
 *.quil
+*evaluator/
