@@ -25,6 +25,8 @@ Win rate: 84.0%
 
 import numpy as np
 import cirq
+import pytest
+import math
 
 def main():
     # Create circuit.
@@ -47,14 +49,14 @@ def main():
     kc_simulator = cirq.KnowledgeCompilationSimulator(program=circuit, intermediate=False)
     kc_result = kc_simulator.simulate(program=circuit)
 
-    print("sv_result.final_state")
-    print(sv_result.final_state)
-    print("kc_result.final_state")
-    print(kc_result.final_state)
+    print("sv_result.final_state_vector")
+    print(sv_result.final_state_vector)
+    print("kc_result.final_state_vector")
+    print(kc_result.final_state_vector)
 
     np.testing.assert_almost_equal(
-        sv_result.final_state,
-        kc_result.final_state
+        sv_result.final_state_vector,
+        kc_result.final_state_vector
     )
 
     repetitions = 7500
@@ -79,6 +81,7 @@ def main():
     print('y:', bitstring(y))
     print('(a XOR b) == (x AND y):\n  ', bitstring(outcomes))
     print('Win rate: {}%'.format(win_percent))
+    assert win_percent/100. == pytest.approx(math.cos(math.pi/8)*math.cos(math.pi/8),.1)
 
 
 def make_bell_test_circuit(alice, bob, alice_referee, bob_referee):

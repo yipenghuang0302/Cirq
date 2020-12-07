@@ -121,6 +121,7 @@ def main():
     print('Most common bitstring: {}'.format(most_common_bitstring))
     print('Found a match: {}'.format(
         most_common_bitstring == bitstring(x_bits)))
+    assert(most_common_bitstring == bitstring(x_bits))
 
 
 if __name__ == '__main__':

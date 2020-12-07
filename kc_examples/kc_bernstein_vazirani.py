@@ -77,6 +77,7 @@ def main(qubit_count = 2):
     most_common_bitstring = frequencies.most_common(1)[0][0]
     print('Most common matches secret factors:\n{}'.format(
         most_common_bitstring == bitstring(secret_factor_bits)))
+    assert most_common_bitstring == bitstring(secret_factor_bits)
 
 
 def make_oracle(input_qubits,

@@ -103,6 +103,8 @@ def main(qubit_count=2):
     print('Circuit:')
     print(circuit)
     print(f'Most common answer was : {freqs.most_common(1)[0]}')
+    if (freqs.most_common(1)[0][1]==n_samples):
+        assert freqs.most_common(1)[0][0] == str(secret_string)
 
 
 def make_oracle(input_qubits, output_qubits, secret_string):

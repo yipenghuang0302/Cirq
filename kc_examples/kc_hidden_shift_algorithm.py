@@ -167,6 +167,7 @@ def main():
     most_common_bitstring = frequencies.most_common(1)[0][0]
     print(f'Most common bitstring: {most_common_bitstring}')
     print(f'Found a match: {most_common_bitstring == bitstring(shift)}')
+    assert most_common_bitstring == bitstring(shift)
 
 
 if __name__ == '__main__':
