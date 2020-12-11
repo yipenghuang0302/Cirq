@@ -205,8 +205,8 @@ def main(
             #     )
             # for index, probability in enumerate(exact_probabilities):
             #     exact_histogram[index] = probability * repetitions
-            #     print ('iter='+str(iter)+' bitstring='+str(index)+' kc_samples='+str(kc_histogram[index])+' dm_samples='+str(dm_histogram[index])+' exact_histogram='+str(exact_histogram[index]))
-
+            #     print ('iter='+str(iter)+' bitstring='+str(index)+' kc_probability='+str(kc_histogram[index]/repetitions)+' dm_probability='+str(dm_histogram[index]/repetitions)+' probability='+str(probability))
+            
             # kc_chisq, _ = scipy.stats.chisquare( f_obs=kc_histogram, f_exp=exact_histogram )
             # dm_chisq, _ = scipy.stats.chisquare( f_obs=dm_histogram, f_exp=exact_histogram )
             # kc_power_divergence, _ = scipy.stats.power_divergence( f_obs=kc_histogram, f_exp=exact_histogram, lambda_="pearson" )
