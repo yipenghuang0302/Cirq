@@ -69,10 +69,8 @@ from matplotlib import rcParams
 rcParams.update({'figure.autolayout': True})
 
 qs_smp_01_time_dict = {}
-# qs_smp_04_time_dict = {}
 qs_smp_16_time_dict = {}
 qt_smp_01_time_dict = {}
-# qt_smp_04_time_dict = {}
 qt_smp_16_time_dict = {}
 kc_smp_time_dict = {}
 
@@ -93,10 +91,8 @@ def main(p=1):
                 vertices_all.append(n)
 
                 qs_smp_01_time_dict[n] = []
-                # qs_smp_04_time_dict[n] = []
                 qs_smp_16_time_dict[n] = []
                 qt_smp_01_time_dict[n] = []
-                # qt_smp_04_time_dict[n] = []
                 qt_smp_16_time_dict[n] = []
                 kc_smp_time_dict[n] = []
 
@@ -104,18 +100,14 @@ def main(p=1):
                     trial(n=n,p=p,repetitions=1000)
 
             qs_smp_01_time_mean = []
-            # qs_smp_04_time_mean = []
             qs_smp_16_time_mean = []
             qt_smp_01_time_mean = []
-            # qt_smp_04_time_mean = []
             qt_smp_16_time_mean = []
             kc_smp_time_mean = []
 
             qs_smp_01_time_stdev = []
-            # qs_smp_04_time_stdev = []
             qs_smp_16_time_stdev = []
             qt_smp_01_time_stdev = []
-            # qt_smp_04_time_stdev = []
             qt_smp_16_time_stdev = []
             kc_smp_time_stdev = []
 
@@ -125,17 +117,11 @@ def main(p=1):
                     qs_smp_01_time_mean.append(mean(qs_smp_01_time_dict[n]))
                     qs_smp_01_time_stdev.append(stdev(qs_smp_01_time_dict[n]))
 
-                    # qs_smp_04_time_mean.append(mean(qs_smp_04_time_dict[n]))
-                    # qs_smp_04_time_stdev.append(stdev(qs_smp_04_time_dict[n]))
-
                     qs_smp_16_time_mean.append(mean(qs_smp_16_time_dict[n]))
                     qs_smp_16_time_stdev.append(stdev(qs_smp_16_time_dict[n]))
 
                 qt_smp_01_time_mean.append(mean(qt_smp_01_time_dict[n]))
                 qt_smp_01_time_stdev.append(stdev(qt_smp_01_time_dict[n]))
-
-                # qt_smp_04_time_mean.append(mean(qt_smp_04_time_dict[n]))
-                # qt_smp_04_time_stdev.append(stdev(qt_smp_04_time_dict[n]))
 
                 qt_smp_16_time_mean.append(mean(qt_smp_16_time_dict[n]))
                 qt_smp_16_time_stdev.append(stdev(qt_smp_16_time_dict[n]))
@@ -153,10 +139,8 @@ def main(p=1):
             ax.set_yscale('log')
             ax.grid(linestyle="--", linewidth=0.25, color='.125', zorder=-10)
             ax.errorbar(vertices_qsim, qs_smp_01_time_mean, yerr=qs_smp_01_time_stdev, color='green' , marker='+', label='qsim sampling with 1 thread')
-            # ax.errorbar(vertices_qsim, qs_smp_04_time_mean, yerr=qs_smp_04_time_stdev, color='cyan' , marker='+', label='qsim sampling with 4 threads')
             ax.errorbar(vertices_qsim, qs_smp_16_time_mean, yerr=qs_smp_16_time_stdev, color='blue', marker='+', label='qsim sampling with 16 threads')
             ax.errorbar(vertices_all, qt_smp_01_time_mean, yerr=qt_smp_01_time_stdev, color='orange' , marker='x', label='qtorch sampling with 1 thread')
-            # ax.errorbar(vertices_all, qt_smp_04_time_mean, yerr=qt_smp_04_time_stdev, color='orange' , marker='x', label='qtorch sampling with 4 threads')
             ax.errorbar(vertices_all, qt_smp_16_time_mean, yerr=qt_smp_16_time_stdev, color='red', marker='x', label='qtorch sampling with 16 threads')
             ax.errorbar(vertices_all, kc_smp_time_mean, yerr=kc_smp_time_stdev, color='purple', marker='o', label='knowledge compilation sampling')
             ax.legend(loc='upper left', frameon=False)
@@ -185,9 +169,8 @@ def trial(n=6, p=2, repetitions=1000, maxiter=2):
     # sv_sim = cirq.Simulator()
     # dm_simulator = cirq.DensityMatrixSimulator()
     qs_sim_01 = qsimcirq.QSimSimulator( qsim_options={'t': 1, 'v': 0} )
-    # qs_sim_04 = qsimcirq.QSimSimulator( qsim_options={'t': 4, 'v': 0} )
     qs_sim_16 = qsimcirq.QSimSimulator( qsim_options={'t':16, 'v': 0} )
-    path_to_qtorch = '/common/users/yh804/research/qtorch/bin/qtorch'
+    path_to_qtorch = '/common/home/yh804/research/qtorch/bin/qtorch'
     regex = r"\{(.*?)\}"
     new_circuit_topo = True
     # kc_sim = cirq.KnowledgeCompilationSimulator(cirq_circuit, initial_state=0)
@@ -214,16 +197,13 @@ def trial(n=6, p=2, repetitions=1000, maxiter=2):
         # VALIDATE STATE VECTOR SIMULATION
         solved_circuit = cirq.resolve_parameters(meas_circuit, param_resolver)
         solved_circuit._to_quil_output().save_to_file('kc_qtorch_qaoa.quil')
-        cirq.ConvertToCzAndSingleGates().optimize_circuit(solved_circuit) # cannot work with params
-        cirq.ExpandComposite().optimize_circuit(solved_circuit)
-        qsim_circuit = qsimcirq.QSimCircuit(solved_circuit)
 
         # sv_sim_start = time.time()
         # sv_sim_result = sv_sim.simulate(cirq_circuit, param_resolver=param_resolver)
         # sv_sim_time = time.time() - sv_sim_start
 
         # qs_sim_start = time.time()
-        # qs_sim_result = qs_sim_16.simulate(qsim_circuit)
+        # qs_sim_result = qs_sim_16.simulate(cirq_circuit, param_resolver=param_resolver)
         # qs_sim_time = time.time() - qs_sim_start
 
         # kc_sim_start = time.time()
@@ -279,17 +259,12 @@ def trial(n=6, p=2, repetitions=1000, maxiter=2):
         # Sample bitstrings from circuit
         if n<=qsim_max:
             qs_smp_01_start = time.time()
-            qs_smp_01_result = qs_sim_01.run(qsim_circuit, repetitions=repetitions)
+            qs_smp_01_result = qs_sim_01.run(meas_circuit, param_resolver=param_resolver, repetitions=repetitions)
             qs_smp_01_time = time.time() - qs_smp_01_start
             qs_smp_01_time_dict[n].append(qs_smp_01_time)
 
-            # qs_smp_04_start = time.time()
-            # qs_smp_04_result = qs_sim_04.run(qsim_circuit, repetitions=repetitions)
-            # qs_smp_04_time = time.time() - qs_smp_04_start
-            # qs_smp_04_time_dict[n].append(qs_smp_04_time)
-
             qs_smp_16_start = time.time()
-            qs_smp_16_result = qs_sim_16.run(qsim_circuit, repetitions=repetitions)
+            qs_smp_16_result = qs_sim_16.run(meas_circuit, param_resolver=param_resolver, repetitions=repetitions)
             qs_smp_16_time = time.time() - qs_smp_16_start
             qs_smp_16_time_dict[n].append(qs_smp_16_time)
 
@@ -358,27 +333,6 @@ def trial(n=6, p=2, repetitions=1000, maxiter=2):
         begin_time = float(matches[1])
         end_time = float(matches[2])
         qt_smp_01_time_dict[n].append(repetitions*(end_time-begin_time))
-
-#         with open('kc_qtorch_qaoa.inp','w') as inp_file:
-#             inp_file.write('''# Line graph decomposition method for contraction
-# >string qasm kc_qtorch_qaoa.quil
-# >string contractmethod simple-stoch
-# # >string contractmethod linegraph-qbb
-# # >int quickbbseconds 60
-# >string measurement kc_qtorch_qaoa.meas
-# >string outputpath kc_qtorch_qaoa.out
-# # >bool qbbonly true
-# # >bool readqbbresonly true
-# >int threads 4
-# ''')
-#         bitstring = randrange(1<<n)
-#         with open('kc_qtorch_qaoa.meas','w') as meas_file:
-#             meas_file.write("{:b}".format(bitstring).zfill(n))
-#         stdout = subprocess.check_output([path_to_qtorch, 'kc_qtorch_qaoa.inp'], stderr=subprocess.STDOUT)
-#         matches = re.findall(regex, stdout.decode("utf-8"), re.MULTILINE | re.DOTALL)
-#         begin_time = float(matches[1])
-#         end_time = float(matches[2])
-#         qt_smp_04_time_dict[n].append(repetitions*(end_time-begin_time))
 
         with open('kc_qtorch_qaoa.inp','w') as inp_file:
             inp_file.write('''# Line graph decomposition method for contraction

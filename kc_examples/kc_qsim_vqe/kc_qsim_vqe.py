@@ -143,17 +143,12 @@ def trial(length=2, steps=1, repetitions=1000, maxiter=2):
         param_resolver = cirq.ParamResolver({ 'alpha':x[0], 'beta':x[1], 'gamma':x[2] })
 
         # VALIDATE STATE VECTOR SIMULATION
-        solved_circuit = cirq.resolve_parameters(meas_circuit, param_resolver)
-        cirq.ConvertToCzAndSingleGates().optimize_circuit(solved_circuit) # cannot work with params
-        cirq.ExpandComposite().optimize_circuit(solved_circuit)
-        qsim_circuit = qsimcirq.QSimCircuit(solved_circuit)
-
         # sv_sim_start = time.time()
         # sv_sim_result = sv_sim.simulate(cirq_circuit, param_resolver=param_resolver)
         # sv_sim_time = time.time() - sv_sim_start
 
         # qs_sim_start = time.time()
-        # qs_sim_result = qs_sim_16.simulate(qsim_circuit)
+        # qs_sim_result = qs_sim_16.simulate(cirq_circuit, param_resolver=param_resolver)
         # qs_sim_time = time.time() - qs_sim_start
 
         # kc_sim_start = time.time()
@@ -202,27 +197,27 @@ def trial(length=2, steps=1, repetitions=1000, maxiter=2):
 
         # Sample bitstrings from circuit
         qs_smp_01_start = time.time()
-        qs_smp_01_result = qs_sim_01.run(qsim_circuit, repetitions=repetitions)
+        qs_smp_01_result = qs_sim_01.run(meas_circuit, param_resolver=param_resolver, repetitions=repetitions)
         qs_smp_01_time = time.time() - qs_smp_01_start
         qs_smp_01_time_dict[length*length].append(qs_smp_01_time)
 
         # qs_smp_02_start = time.time()
-        # qs_smp_02_result = qs_sim_02.run(qsim_circuit, repetitions=repetitions)
+        # qs_smp_02_result = qs_sim_02.run(meas_circuit, repetitions=repetitions)
         # qs_smp_02_time = time.time() - qs_smp_02_start
         # qs_smp_02_time_dict[length*length].append(qs_smp_02_time)
 
         qs_smp_04_start = time.time()
-        qs_smp_04_result = qs_sim_04.run(qsim_circuit, repetitions=repetitions)
+        qs_smp_04_result = qs_sim_04.run(meas_circuit, param_resolver=param_resolver, repetitions=repetitions)
         qs_smp_04_time = time.time() - qs_smp_04_start
         qs_smp_04_time_dict[length*length].append(qs_smp_04_time)
 
         # qs_smp_08_start = time.time()
-        # qs_smp_08_result = qs_sim_08.run(qsim_circuit, repetitions=repetitions)
+        # qs_smp_08_result = qs_sim_08.run(meas_circuit, repetitions=repetitions)
         # qs_smp_08_time = time.time() - qs_smp_08_start
         # qs_smp_08_time_dict[length*length].append(qs_smp_08_time)
 
         qs_smp_16_start = time.time()
-        qs_smp_16_result = qs_sim_16.run(qsim_circuit, repetitions=repetitions)
+        qs_smp_16_result = qs_sim_16.run(meas_circuit, param_resolver=param_resolver, repetitions=repetitions)
         qs_smp_16_time = time.time() - qs_smp_16_start
         qs_smp_16_time_dict[length*length].append(qs_smp_16_time)
 
