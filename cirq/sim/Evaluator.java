@@ -436,10 +436,11 @@ public class Evaluator {
     int varForNoise = noiseRVToVar[randomNoise];
     // System.out.println("varForNoise = " + varForNoise);
 
-    double partial_0 = g.varPartials(varForNoise)[0].abs() * g.varPartials(varForNoise)[0].abs();
-    double partial_1 = g.varPartials(varForNoise)[1].abs() * g.varPartials(varForNoise)[1].abs();
-    double partial_2 = g.varPartials(varForNoise)[2].abs() * g.varPartials(varForNoise)[2].abs();
-    double partial_3 = g.varPartials(varForNoise)[3].abs() * g.varPartials(varForNoise)[3].abs();
+    Complex[] varPartials = g.varPartials(varForNoise);
+    double partial_0 = varPartials[0].abs() * varPartials[0].abs();
+    double partial_1 = varPartials[1].abs() * varPartials[1].abs();
+    double partial_2 = varPartials[2].abs() * varPartials[2].abs();
+    double partial_3 = varPartials[3].abs() * varPartials[3].abs();
 
     double prob_0 = partial_0/(partial_0+partial_1+partial_2+partial_3);
     double prob_1 = partial_1/(partial_0+partial_1+partial_2+partial_3);
@@ -520,17 +521,18 @@ public class Evaluator {
     int varForQubit = qubitFinalToVar[randomQubit];
     // System.out.println("varForQubit = " + varForQubit);
 
+    Complex[] varPartials = g.varPartials(varForQubit);
     // evidence.varCommit(varForQubit, 0);
     // g.evaluate(evidence);
     // Complex amplitude_0 = g.evaluationResults();
     // double partial_0 = amplitude_0.abs() * amplitude_0.abs();
-    double partial_0 = g.varPartials(varForQubit)[0].abs() * g.varPartials(varForQubit)[0].abs();
+    double partial_0 = varPartials[0].abs() * varPartials[0].abs();
 
     // evidence.varCommit(varForQubit, 1);
     // g.evaluate(evidence);
     // Complex amplitude_1 = g.evaluationResults();
     // double partial_1 = amplitude_1.abs() * amplitude_1.abs();
-    double partial_1 = g.varPartials(varForQubit)[1].abs() * g.varPartials(varForQubit)[1].abs();
+    double partial_1 = varPartials[1].abs() * varPartials[1].abs();
 
     double probability = partial_1/(partial_0+partial_1);
     // System.out.println("partial_0 = " + partial_0);
