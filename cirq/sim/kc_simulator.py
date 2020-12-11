@@ -520,7 +520,7 @@ potential ( {target_posterior} | '''
                     # print(repr(op))
                     # print(isinstance(op.gate, ops.CZPowGate))
 
-                    if protocols.has_unitary(op): # or isinstance(op.gate, ops.CZPowGate):
+                    if protocols.has_unitary(op) or isinstance(op.gate, ops.CZPowGate):
                         unitary_matrix = protocols.unitary(op)
                     else: # protocols.has_channel(op)
                         unitary_matrix = [[0+0j,0+0j],[0+0j,0+0j]]
@@ -683,8 +683,6 @@ potential ( {target_posterior} | '''
         param_resolver: study.ParamResolver,
         repetitions: int) -> Dict[str, List[np.ndarray]]:
 
-        # print("HERE0")
-
         self._repetitions = repetitions
         self._subprocess.stdin.write(f'cc$R${self._repetitions}\n'.encode())
 
@@ -821,8 +819,6 @@ potential ( {target_posterior} | '''
         else:
 
             # prep_start = time.time()
-
-            # print("HERE1")
 
             param_dict = {}
             for target_qubit, initial_value in zip (
@@ -977,7 +973,6 @@ potential ( {target_posterior} | '''
                             # print("density_matrix")
                             # print(density_matrix)
 
-                        # print("HERE3")
                         for op in moment:
                             indices = [self._qubit_map[qubit] for qubit in op.qubits]
                             if protocols.is_measurement(op):
