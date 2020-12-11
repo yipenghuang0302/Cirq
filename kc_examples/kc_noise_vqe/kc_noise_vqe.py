@@ -196,7 +196,6 @@ def trial(length=2, steps=1, repetitions=1000, maxiter=2):
         if length*length<=cirq_max:
             print ('dm_value='+str(dm_value)+' kc_value='+str(kc_value))
             # print ( 'dm_sim_time='+str(dm_sim_time)+' kc_sim_time='+str(kc_sim_time) )
-            # print ( 'dm_sim_time='+str(dm_sim_time) )
             print ( 'dm_smp_time='+str(dm_smp_time)+' kc_smp_time='+str(kc_smp_time) )
         print ('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
         # eval_iter += 1
