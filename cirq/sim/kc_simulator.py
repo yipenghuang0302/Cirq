@@ -27,8 +27,8 @@ from cirq.sim import simulator, state_vector, density_matrix_utils, state_vector
 import os, subprocess, re, csv, sys, time
 
 path_to_bayes_to_cnf = "/home/bayes-to-cnf"
-path_to_qACE = "/common/home/yh804/research/qACE"
-path_to_Cirq = "/common/home/yh804/research/Google/Cirq"
+path_to_qACE = "/home/qACE"
+path_to_Cirq = "/home/Cirq"
 
 class KnowledgeCompilationSimulator(simulator.SimulatesSamples,
                                     state_vector_simulator.SimulatesIntermediateStateVector):
