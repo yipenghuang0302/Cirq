@@ -24,7 +24,7 @@ qt_smp_16_time_dict = {}
 kc_smp_time_dict = {}
 
 qsim_max = 30
-qtorch_max = 25
+qtorch_max = 20
 
 def main():
 
