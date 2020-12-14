@@ -231,24 +231,24 @@ def test_run_param_resolver(dtype):
             np.testing.assert_equal(result.params, param_resolver)
 
 
-@pytest.mark.parametrize('dtype', [np.complex64, np.complex128])
-def test_run_mixture(dtype):
-    q0 = cirq.LineQubit(0)
-    circuit = cirq.Circuit(cirq.bit_flip(0.5)(q0), cirq.measure(q0))
-    simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
-    result = simulator.run(circuit, repetitions=100)
-    assert 20 < sum(result.measurements['0'])[0] < 80
+# @pytest.mark.parametrize('dtype', [np.complex64, np.complex128])
+# def test_run_mixture(dtype):
+#     q0 = cirq.LineQubit(0)
+#     circuit = cirq.Circuit(cirq.bit_flip(0.5)(q0), cirq.measure(q0))
+#     simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
+#     result = simulator.run(circuit, repetitions=100)
+#     assert 20 < sum(result.measurements['0'])[0] < 80
 
 
-@pytest.mark.parametrize('dtype', [np.complex64, np.complex128])
-def test_run_mixture_with_gates(dtype):
-    q0 = cirq.LineQubit(0)
-    circuit = cirq.Circuit(cirq.H(q0), cirq.phase_flip(0.5)(q0),
-                                    cirq.H(q0), cirq.measure(q0))
-    simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
-    result = simulator.run(circuit, repetitions=100)
-    assert sum(result.measurements['0'])[0] < 80
-    assert sum(result.measurements['0'])[0] > 20
+# @pytest.mark.parametrize('dtype', [np.complex64, np.complex128])
+# def test_run_mixture_with_gates(dtype):
+#     q0 = cirq.LineQubit(0)
+#     circuit = cirq.Circuit(cirq.H(q0), cirq.phase_flip(0.5)(q0),
+#                                     cirq.H(q0), cirq.measure(q0))
+#     simulator = cirq.KnowledgeCompilationSimulator(circuit, dtype=dtype)
+#     result = simulator.run(circuit, repetitions=100)
+#     assert sum(result.measurements['0'])[0] < 80
+#     assert sum(result.measurements['0'])[0] > 20
 
 
 @pytest.mark.parametrize('dtype', [np.complex64, np.complex128])
