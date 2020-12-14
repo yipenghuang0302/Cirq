@@ -72,8 +72,8 @@ cirq_max = 12
 
 def main():
 
-    for p in range(1,3):
-        for max_length in range(8,16,2): #36
+    for p in range(1,2):
+        for max_length in range(12,14,2): #36
 
             vertices_cirq = []
             vertices_all = []

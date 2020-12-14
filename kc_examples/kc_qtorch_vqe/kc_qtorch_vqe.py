@@ -24,12 +24,12 @@ qt_smp_16_time_dict = {}
 kc_smp_time_dict = {}
 
 qsim_max = 30
-qtorch_max = 9
+qtorch_max = 25
 
 def main():
 
-    for steps in range(1,3):
-        for max_length in range(4,7):
+    for steps in range(1,2):
+        for max_length in range(6,7):
 
             grid_points_qsim = []
             grid_points_qtorch = []

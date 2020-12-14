@@ -17,12 +17,12 @@ rcParams.update({'figure.autolayout': True})
 dm_smp_time_dict = {}
 kc_smp_time_dict = {}
 
-cirq_max = 9
+cirq_max = 16
 
 def main():
 
     for max_length in range(4,5):
-        for steps in range(1,3):
+        for steps in range(1,2):
 
             grid_points_cirq = []
             grid_points_all = []
